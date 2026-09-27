@@ -1,0 +1,316 @@
+PROMPT HISTORY / ALL PROMPTS USED TILL NOW
+
+1) Initial build prompt
+Build the complete “Reaching the Unreached” MERN full-stack application from the existing workspace.
+
+I want you to perform the implementation yourself. Do not merely explain the code or give me instructions. Create the files, install dependencies, configure the project, write the code, run the application, test it, identify errors, and fix them.
+
+The application should be completed from the initial project setup through a fully functional appointment-booking system.
+
+I already have a MongoDB Atlas connection string. When database configuration is required, create the appropriate ".env" file and tell me exactly where to put the connection string. Never hard-code the connection string or credentials into source code.
+
+---
+
+2) Technology stack requirements
+Use:
+
+- React
+- Vite
+- JavaScript
+- Node.js
+- Express.js
+- MongoDB Atlas
+- Mongoose
+- Tailwind CSS
+- REST APIs
+
+Use a separate frontend and backend structure.
+
+Do not introduce unnecessary frameworks or technologies.
+
+---
+
+3) Project structure requirement
+Create a clean structure similar to:
+
+reaching-the-unreached/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── layouts/
+│   │   ├── services/
+│   │   ├── context/
+│   │   ├── hooks/
+│   │   └── utils/
+│   ├── package.json
+│   └── ...
+│
+├── backend/
+│   ├── config/
+│   ├── controllers/
+│   ├── models/
+│   ├── routes/
+│   ├── middleware/
+│   ├── services/
+│   ├── utils/
+│   ├── seed/
+│   ├── server.js
+│   ├── package.json
+│   └── .env
+│
+├── .gitignore
+└── README.md
+
+Adapt this structure if you have a better clean architecture, but keep frontend and backend clearly separated.
+
+---
+
+4) Install and configure requirement
+Install all dependencies required for the application.
+
+Set up:
+
+- React/Vite
+- Tailwind CSS
+- Express
+- Mongoose
+- CORS
+- dotenv
+- Authentication dependencies
+- Password hashing
+- Any other dependency genuinely required
+
+Do not ask me to manually create every folder or file.
+
+Run the necessary commands yourself whenever possible.
+
+---
+
+5) Environment variables requirement
+Create the appropriate ".env" structure.
+
+For the backend, use something similar to:
+
+PORT=5000
+MONGO_URI=
+JWT_SECRET=
+
+Leave the MongoDB connection value empty if I have not supplied it directly.
+
+Tell me clearly:
+
+«Paste your MongoDB Atlas connection string into "MONGO_URI".»
+
+Do not commit ".env" to GitHub.
+
+Add ".env" to ".gitignore".
+
+Also create an appropriate ".env.example" containing placeholder values but no real secrets.
+
+---
+
+6) Database connection requirement
+Connect the Express backend to MongoDB Atlas using Mongoose.
+
+Create a reusable database connection configuration.
+
+When the application starts:
+
+- Connect to MongoDB Atlas.
+- Display a clear success message when connected.
+- Display a useful error message if connection fails.
+- Do not expose credentials.
+
+---
+
+7) Database models requirement
+Create the necessary MongoDB models.
+
+At minimum:
+
+User
+
+Fields should include appropriate information such as:
+
+- name
+- email
+- password
+- role
+- phone
+- createdAt
+
+Roles:
+
+patient
+doctor
+admin
+
+Doctor
+
+Include:
+
+- user reference
+- name
+- specialization
+- qualification
+- experience
+- hospital
+- location
+- phone
+- consultation information
+- profile image if appropriate
+- availability
+
+Patient
+
+Include:
+
+- user reference
+- name
+- age
+- gender
+- phone
+- location
+
+Appointment
+
+Include:
+
+- patient
+- doctor
+- date
+- time
+- status
+- reason
+- createdAt
+
+Statuses:
+
+Pending
+Confirmed
+Cancelled
+Completed
+Rejected
+
+Use MongoDB references appropriately.
+
+---
+
+8) Seed data requirement
+I do not want to manually enter lots of data.
+
+Create a database seed system that automatically inserts realistic sample/demo data into MongoDB Atlas.
+
+Create sample:
+
+Doctors
+
+At least 8–10 doctors with different specializations, such as:
+
+- General Physician
+- Cardiologist
+- Dermatologist
+- Pediatrician
+- Gynecologist
+- Orthopedic
+- ENT Specialist
+- Dentist
+
+Use realistic but fictional names and information.
+
+Patients
+
+Create several fictional demo patients.
+
+Hospitals
+
+Create several fictional healthcare facilities with:
+
+- name
+- location
+- contact
+- total beds
+- available beds
+
+Doctor availability
+
+Create realistic available dates and time slots for the sample doctors.
+
+Do not use real people's personal information.
+
+Make the seed operation safe.
+
+If the sample data already exists, do not continuously create duplicates every time the server starts.
+
+---
+
+9) App behavior and functionality requirement
+The application should be completed from the initial project setup through a fully functional appointment-booking system.
+
+The application should support:
+- user registration and login
+- patient, doctor, and admin roles
+- doctor listing and search
+- appointment booking
+- admin dashboard
+- doctor dashboard
+- hospital listings
+- real CRUD/booking flows at backend level
+
+---
+
+10) E-prescription requirement
+Implement the e-prescription functionality required by prompt.txt.
+
+This includes:
+- creating prescriptions tied to an appointment
+- valid prescription fields such as diagnosis and medications
+- role-based access for doctor and patient
+- duplicate prevention for prescriptions on the same appointment
+- patient and doctor viewing of authorized prescriptions
+
+---
+
+11) Browser/network debug requirement
+The frontend opens successfully, but every action in the browser shows "Network Error". Do NOT modify any files yet. Diagnose the frontend-to-backend connection only.
+
+Fix the browser "Network Error" caused by the frontend/backend origin mismatch. Make the SMALLEST possible configuration change.
+
+The goal is to resolve the issue without over-engineering the fix.
+
+---
+
+12) Codespaces / forwarded-port fix requirement
+The app must work correctly in a Codespaces environment.
+
+Use the actual requirements in prompt.txt as the source of truth.
+
+The browser issue is caused by localhost and forwarded-port mismatch inside Codespaces.
+
+The required fix is to make the frontend use a Vite proxy so /api requests are routed to the local backend at localhost:5000 instead of the public forwarded backend URL.
+
+This is the minimal and correct solution.
+
+---
+
+13) Documentation requirement
+Update the existing README.md in this project and keep it based on actual repository code and verified behavior.
+
+The README should reflect the actual implementation, not hypothetical features.
+
+It should be a truthful project summary, useful for explanation, viva prep, and reporting.
+
+---
+
+14) Final repository expectation
+Create the files, install dependencies, configure the project, write the code, run the application, test it, identify errors, and fix them.
+
+Do not rebuild the project from scratch.
+
+Now verify the implemented project by actually running it.
+
+Use the actual requirements in prompt.txt as the source of truth.
+
+This request is to complete the system, validate it, and record the prompt history into a consolidated file.
