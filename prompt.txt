@@ -1,0 +1,878 @@
+Build the complete “Reaching the Unreached” MERN full-stack application from the existing workspace.
+
+I want you to perform the implementation yourself. Do not merely explain the code or give me instructions. Create the files, install dependencies, configure the project, write the code, run the application, test it, identify errors, and fix them.
+
+The application should be completed from the initial project setup through a fully functional appointment-booking system.
+
+I already have a MongoDB Atlas connection string. When database configuration is required, create the appropriate ".env" file and tell me exactly where to put the connection string. Never hard-code the connection string or credentials into source code.
+
+---
+
+1. TECHNOLOGY STACK
+
+Use:
+
+- React
+- Vite
+- JavaScript
+- Node.js
+- Express.js
+- MongoDB Atlas
+- Mongoose
+- Tailwind CSS
+- REST APIs
+
+Use a separate frontend and backend structure.
+
+Do not introduce unnecessary frameworks or technologies.
+
+---
+
+2. PROJECT STRUCTURE
+
+Create a clean structure similar to:
+
+reaching-the-unreached/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── layouts/
+│   │   ├── services/
+│   │   ├── context/
+│   │   ├── hooks/
+│   │   └── utils/
+│   ├── package.json
+│   └── ...
+│
+├── backend/
+│   ├── config/
+│   ├── controllers/
+│   ├── models/
+│   ├── routes/
+│   ├── middleware/
+│   ├── services/
+│   ├── utils/
+│   ├── seed/
+│   ├── server.js
+│   ├── package.json
+│   └── .env
+│
+├── .gitignore
+└── README.md
+
+Adapt this structure if you have a better clean architecture, but keep frontend and backend clearly separated.
+
+---
+
+3. INSTALL AND CONFIGURE EVERYTHING
+
+Install all dependencies required for the application.
+
+Set up:
+
+- React/Vite
+- Tailwind CSS
+- Express
+- Mongoose
+- CORS
+- dotenv
+- Authentication dependencies
+- Password hashing
+- Any other dependency genuinely required
+
+Do not ask me to manually create every folder or file.
+
+Run the necessary commands yourself whenever possible.
+
+---
+
+4. ENVIRONMENT VARIABLES
+
+Create the appropriate ".env" structure.
+
+For the backend, use something similar to:
+
+PORT=5000
+MONGO_URI=
+JWT_SECRET=
+
+Leave the MongoDB connection value empty if I have not supplied it directly.
+
+Tell me clearly:
+
+«Paste your MongoDB Atlas connection string into "MONGO_URI".»
+
+Do not commit ".env" to GitHub.
+
+Add ".env" to ".gitignore".
+
+Also create an appropriate ".env.example" containing placeholder values but no real secrets.
+
+---
+
+5. DATABASE CONNECTION
+
+Connect the Express backend to MongoDB Atlas using Mongoose.
+
+Create a reusable database connection configuration.
+
+When the application starts:
+
+- Connect to MongoDB Atlas.
+- Display a clear success message when connected.
+- Display a useful error message if connection fails.
+- Do not expose credentials.
+
+---
+
+6. DATABASE MODELS
+
+Create the necessary MongoDB models.
+
+At minimum:
+
+User
+
+Fields should include appropriate information such as:
+
+- name
+- email
+- password
+- role
+- phone
+- createdAt
+
+Roles:
+
+patient
+doctor
+admin
+
+Doctor
+
+Include:
+
+- user reference
+- name
+- specialization
+- qualification
+- experience
+- hospital
+- location
+- phone
+- consultation information
+- profile image if appropriate
+- availability
+
+Patient
+
+Include:
+
+- user reference
+- name
+- age
+- gender
+- phone
+- location
+
+Appointment
+
+Include:
+
+- patient
+- doctor
+- date
+- time
+- status
+- reason
+- createdAt
+
+Statuses:
+
+Pending
+Confirmed
+Cancelled
+Completed
+Rejected
+
+Use MongoDB references appropriately.
+
+---
+
+7. SAMPLE DATA / SEEDING
+
+I do not want to manually enter lots of data.
+
+Create a database seed system that automatically inserts realistic sample/demo data into MongoDB Atlas.
+
+Create sample:
+
+Doctors
+
+At least 8–10 doctors with different specializations, such as:
+
+- General Physician
+- Cardiologist
+- Dermatologist
+- Pediatrician
+- Gynecologist
+- Orthopedic
+- ENT Specialist
+- Dentist
+
+Use realistic but fictional names and information.
+
+Patients
+
+Create several fictional demo patients.
+
+Hospitals
+
+Create several fictional healthcare facilities with:
+
+- name
+- location
+- contact
+- total beds
+- available beds
+
+Doctor availability
+
+Create realistic available dates and time slots for the sample doctors.
+
+Do not use real people's personal information.
+
+Make the seed operation safe.
+
+If the sample data already exists, do not continuously create duplicates every time the server starts.
+
+Provide a seed command such as:
+
+npm run seed
+
+---
+
+8. AUTHENTICATION
+
+Implement complete authentication.
+
+Include:
+
+- Registration
+- Login
+- Logout
+- Password hashing
+- JWT authentication
+- Authentication middleware
+- Role-based authorization
+
+Patients, doctors and admins must have appropriate permissions.
+
+Passwords must never be stored as plain text.
+
+Create protected routes for dashboards and appointment functionality.
+
+---
+
+9. DEMO ACCOUNTS
+
+Create development/demo accounts through the seed system.
+
+For example:
+
+Patient:
+patient@example.com
+
+Doctor:
+doctor@example.com
+
+Admin:
+admin@example.com
+
+Use a clearly documented development password.
+
+Make sure these accounts are fictional and intended only for local/college demonstration.
+
+Document the demo credentials in the README.
+
+---
+
+10. LANDING PAGE
+
+Create a professional landing page for:
+
+Reaching the Unreached
+
+The purpose should be clear:
+
+A healthcare platform designed to help connect underserved/rural communities with doctors and healthcare resources.
+
+Include:
+
+- Navbar
+- Logo/project name
+- Hero section
+- Short project description
+- Main call-to-action
+- Key features
+- How it works
+- Doctor section preview
+- Healthcare accessibility section
+- Footer
+
+Use Tailwind CSS.
+
+Make it responsive.
+
+---
+
+11. NAVIGATION
+
+Create a responsive navigation bar.
+
+Depending on authentication state, show appropriate options.
+
+For example:
+
+Unauthenticated:
+
+Home
+Doctors
+Login
+Register
+
+Patient:
+
+Home
+Find Doctors
+Appointments
+Dashboard
+Logout
+
+Doctor:
+
+Dashboard
+Appointments
+Availability
+Profile
+Logout
+
+Admin:
+
+Dashboard
+Doctors
+Patients
+Appointments
+Logout
+
+---
+
+12. REGISTRATION PAGE
+
+Create a registration page.
+
+Allow users to select:
+
+Patient
+Doctor
+
+Do not allow public users to register as admin.
+
+Validate:
+
+- Name
+- Email
+- Password
+- Phone
+- Required role-specific fields
+
+Display useful validation and error messages.
+
+---
+
+13. LOGIN PAGE
+
+Create a clean login page.
+
+Allow:
+
+- Email
+- Password
+
+After successful login:
+
+- Patient → Patient dashboard
+- Doctor → Doctor dashboard
+- Admin → Admin dashboard
+
+Handle incorrect credentials properly.
+
+---
+
+14. PATIENT DASHBOARD
+
+Create a patient dashboard with:
+
+- Welcome message
+- Profile information
+- Upcoming appointments
+- Previous appointments
+- Find a doctor button
+- Appointment booking button
+- Healthcare resource preview
+
+Use actual data from the backend rather than hard-coded UI data.
+
+---
+
+15. DOCTOR DASHBOARD
+
+Create a doctor dashboard with:
+
+- Doctor profile
+- Upcoming appointments
+- Appointment requests
+- Today's appointments
+- Availability management
+- Patient information relevant to appointments
+
+Use actual backend data.
+
+---
+
+16. ADMIN DASHBOARD
+
+Create an admin dashboard with:
+
+- Total patients
+- Total doctors
+- Total appointments
+- Recent appointments
+- Basic system statistics
+
+Use actual MongoDB data.
+
+---
+
+17. DOCTOR LISTING
+
+Create a Find Doctors page.
+
+Display doctors as attractive cards.
+
+Each card should show:
+
+- Doctor name
+- Specialization
+- Qualification
+- Experience
+- Hospital
+- Location
+- Availability
+- Book Appointment button
+
+Add:
+
+- Search by doctor name
+- Filter by specialization
+
+The information must come from MongoDB through the backend API.
+
+Do not hard-code doctor cards.
+
+---
+
+18. DOCTOR PROFILE
+
+When the patient clicks a doctor:
+
+Show:
+
+- Doctor name
+- Specialization
+- Qualification
+- Experience
+- Hospital
+- Location
+- About
+- Available appointment dates
+- Available time slots
+
+Provide:
+
+Book Appointment
+
+button.
+
+---
+
+19. DOCTOR AVAILABILITY
+
+Implement a proper availability system.
+
+Doctors should be able to define available:
+
+- Dates
+- Time slots
+
+For example:
+
+Monday
+10:00 AM
+10:30 AM
+11:00 AM
+
+Wednesday
+2:00 PM
+2:30 PM
+3:00 PM
+
+Store availability in MongoDB.
+
+Patients should only see available slots.
+
+Once an appointment is booked, that slot should no longer be available for another patient.
+
+---
+
+20. APPOINTMENT BOOKING
+
+This is the main feature to complete.
+
+Implement the complete workflow:
+
+Patient
+   ↓
+Find Doctors
+   ↓
+Select Doctor
+   ↓
+View Doctor Profile
+   ↓
+Select Date
+   ↓
+View Available Time Slots
+   ↓
+Select Time
+   ↓
+Enter Appointment Reason
+   ↓
+Review Appointment
+   ↓
+Confirm Booking
+   ↓
+Appointment Created
+   ↓
+Confirmation Screen
+
+The appointment must be saved to MongoDB.
+
+---
+
+21. PREVENT DOUBLE BOOKING
+
+This is important.
+
+Two patients must not be able to book the same:
+
+Doctor + Date + Time
+
+Implement backend validation for this.
+
+Do not rely only on frontend validation.
+
+If someone tries to book an already-booked slot, return a useful error message such as:
+
+«This appointment slot is no longer available. Please choose another time.»
+
+---
+
+22. APPOINTMENT MANAGEMENT
+
+Patient
+
+Patients should be able to:
+
+- View upcoming appointments
+- View previous appointments
+- View appointment details
+- Cancel appointments where allowed
+
+Doctor
+
+Doctors should be able to:
+
+- View appointment requests
+- Confirm appointments
+- Reject appointments
+- Mark appointments completed
+- View appointment details
+
+Update the database accordingly.
+
+---
+
+23. APPOINTMENT STATUS
+
+Use:
+
+Pending
+Confirmed
+Rejected
+Cancelled
+Completed
+
+Display statuses clearly in the UI.
+
+---
+
+24. BACKEND API
+
+Create proper REST APIs.
+
+At minimum:
+
+Authentication
+
+POST /api/auth/register
+POST /api/auth/login
+
+Doctors
+
+GET /api/doctors
+GET /api/doctors/:id
+PUT /api/doctors/profile
+PUT /api/doctors/availability
+
+Appointments
+
+POST /api/appointments
+GET /api/appointments
+GET /api/appointments/:id
+PUT /api/appointments/:id/status
+DELETE /api/appointments/:id
+
+Create additional endpoints where necessary.
+
+Use controllers rather than putting all logic inside routes.
+
+---
+
+25. FRONTEND API INTEGRATION
+
+Do not use fake frontend data after the backend is implemented.
+
+Connect the React frontend to the Express APIs.
+
+The flow must actually work:
+
+React
+ ↓
+Express API
+ ↓
+Mongoose
+ ↓
+MongoDB Atlas
+ ↓
+Response
+ ↓
+React UI
+
+---
+
+26. ERROR HANDLING
+
+Implement useful error handling for:
+
+- Invalid login
+- Invalid registration
+- Missing fields
+- Unauthorized access
+- Invalid appointment
+- Already booked slot
+- Database errors
+- Server errors
+- Invalid doctor
+- Invalid patient
+- Invalid date/time
+
+Show understandable messages in the frontend.
+
+---
+
+27. UI/UX
+
+Use Tailwind CSS throughout.
+
+Make the interface:
+
+- Clean
+- Modern
+- Professional
+- Healthcare-oriented
+- Responsive
+- Easy to navigate
+
+Include:
+
+- Loading states
+- Empty states
+- Error states
+- Success notifications
+- Disabled buttons while submitting
+- Form validation
+
+Do not make the interface unnecessarily complicated.
+
+---
+
+28. TESTING
+
+After implementing everything, actually run the application.
+
+Test this complete flow:
+
+Patient
+
+Register
+ ↓
+Login
+ ↓
+Find Doctors
+ ↓
+Search/filter doctor
+ ↓
+Open doctor profile
+ ↓
+Select date
+ ↓
+Select time
+ ↓
+Enter reason
+ ↓
+Book appointment
+ ↓
+See confirmation
+ ↓
+See appointment in dashboard
+
+Doctor
+
+Login
+ ↓
+View dashboard
+ ↓
+View appointment
+ ↓
+Confirm/reject appointment
+ ↓
+Manage availability
+
+Admin
+
+Login
+ ↓
+View dashboard
+ ↓
+See patients
+ ↓
+See doctors
+ ↓
+See appointments
+
+Also test that:
+
+- Duplicate appointment booking is prevented.
+- Unauthorized users cannot access protected pages.
+- Database data persists after restarting the server.
+- Sample data appears correctly.
+- Mobile layout works.
+- API errors are handled.
+
+Fix all errors you encounter.
+
+---
+
+29. IMPORTANT — DON'T STOP AT THE UI
+
+I specifically do NOT want a frontend-only prototype.
+
+Every important feature must be connected to the backend and MongoDB Atlas.
+
+For example:
+
+❌ Don't create a fake appointment that only appears on the screen.
+
+Instead:
+
+Patient books appointment
+→ React sends API request
+→ Express validates it
+→ MongoDB stores it
+→ backend returns result
+→ React displays confirmation.
+
+Use the same approach for doctors, users, availability and appointments.
+
+---
+
+30. WHAT YOU SHOULD DO YOURSELF
+
+You are responsible for:
+
+- Creating files
+- Writing code
+- Installing dependencies
+- Configuring the project
+- Creating APIs
+- Creating database models
+- Connecting MongoDB
+- Creating seed data
+- Running the application
+- Testing it
+- Fixing errors
+
+Do not merely tell me what commands I should type if you can execute them yourself.
+
+If you need my MongoDB Atlas connection string, stop and tell me exactly where I need to place it. Do not ask me to expose it in chat if it can be entered directly into the ".env" file.
+
+---
+
+31. FINAL DELIVERABLE
+
+At the end, the project should have:
+
+- Working React frontend
+- Working Express backend
+- MongoDB Atlas connection
+- Tailwind CSS
+- Authentication
+- Patient dashboard
+- Doctor dashboard
+- Admin dashboard
+- Doctor search
+- Doctor profiles
+- Doctor availability
+- Appointment booking
+- Appointment management
+- Duplicate-booking prevention
+- Sample database data
+- Demo accounts
+- Responsive UI
+- Error handling
+
+The application should be ready for me to demonstrate as a college project.
+
+Finally, provide a concise summary containing:
+
+1. What you built
+2. Project structure
+3. Dependencies installed
+4. Environment variables required
+5. Demo account credentials
+6. Commands to start frontend/backend
+7. Any remaining configuration I must do manually
+
+Start implementing the project now. Do not simply describe the implementation.
