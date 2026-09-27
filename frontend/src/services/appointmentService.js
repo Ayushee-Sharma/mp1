@@ -25,4 +25,19 @@ export const appointmentService = {
     const response = await api.delete(`/appointments/${id}`);
     return response.data;
   },
+
+  createPrescription: async (payload) => {
+    const response = await api.post('/prescriptions', payload);
+    return response.data;
+  },
+
+  getPrescriptions: async () => {
+    const response = await api.get('/prescriptions');
+    return response.data;
+  },
+
+  getPrescriptionById: async (id) => {
+    const response = await api.get(`/prescriptions/${id}`);
+    return response.data;
+  },
 };

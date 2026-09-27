@@ -31,6 +31,15 @@ const DoctorDashboard = () => {
   const [appointments, setAppointments] = useState([]);
   const [activeTab, setActiveTab] = useState('requests'); // requests | upcoming | availability | all
   const [loading, setLoading] = useState(true);
+  const [prescribingAppointmentId, setPrescribingAppointmentId] = useState(null);
+  const [prescriptionForm, setPrescriptionForm] = useState({
+    diagnosis: '',
+    medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
+    instructions: '',
+    notes: '',
+    followUpDate: '',
+  });
+  const [savingPrescription, setSavingPrescription] = useState(false);
   const [error, setError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
 
@@ -79,6 +88,88 @@ const DoctorDashboard = () => {
       }
     } catch (err) {
       setError(err.message || 'Failed to update appointment status');
+    }
+  };
+
+  const openPrescriptionForm = (appointment) => {
+    setPrescribingAppointmentId(appointment._id);
+    setPrescriptionForm({
+      diagnosis: '',
+      medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
+      instructions: '',
+      notes: '',
+      followUpDate: '',
+    });
+    setError('');
+    setActionSuccess('');
+  };
+
+  const updateMedicineField = (index, field, value) => {
+    setPrescriptionForm((prev) => {
+      const medicines = [...prev.medications];
+      medicines[index] = { ...medicines[index], [field]: value };
+      return { ...prev, medications };
+    });
+  };
+
+  const addMedicationRow = () => {
+    setPrescriptionForm((prev) => ({
+      ...prev,
+      medications: [...prev.medications, { name: '', dosage: '', frequency: '', duration: '' }],
+    }));
+  };
+
+  const removeMedicationRow = (index) => {
+    setPrescriptionForm((prev) => ({
+      ...prev,
+      medications: prev.medications.length > 1 ? prev.medications.filter((_, i) => i !== index) : prev.medications,
+    }));
+  };
+
+  const handleCreatePrescription = async () => {
+    try {
+      setSavingPrescription(true);
+      setError('');
+      setActionSuccess('');
+
+      if (!prescriptionForm.diagnosis.trim()) {
+        throw new Error('Diagnosis is required before creating a prescription.');
+      }
+
+      const validMedicines = prescriptionForm.medications.filter((med) =>
+        med.name.trim() || med.dosage.trim() || med.frequency.trim() || med.duration.trim()
+      );
+
+      if (validMedicines.length === 0) {
+        throw new Error('Add at least one medicine with dosage, frequency, and duration.');
+      }
+
+      const payload = {
+        appointmentId: prescribingAppointmentId,
+        diagnosis: prescriptionForm.diagnosis,
+        medications: validMedicines,
+        instructions: prescriptionForm.instructions,
+        notes: prescriptionForm.notes,
+        followUpDate: prescriptionForm.followUpDate,
+      };
+
+      const res = await appointmentService.createPrescription(payload);
+      if (res.success) {
+        setActionSuccess('Prescription created successfully.');
+        setPrescribingAppointmentId(null);
+        setPrescriptionForm({
+          diagnosis: '',
+          medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
+          instructions: '',
+          notes: '',
+          followUpDate: '',
+        });
+        loadDoctorData();
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to create prescription.');
+    } finally {
+      setSavingPrescription(false);
     }
   };
 
@@ -398,19 +489,27 @@ const DoctorDashboard = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <div className="flex flex-col sm:flex-row gap-2 items-start justify-between pt-2 border-t border-slate-100">
                       <span className="text-[11px] text-slate-400">
                         Double-booking prevention active for this slot
                       </span>
-                      <button
-                        onClick={() => {
-                          setActiveAppointmentId(appt._id);
-                          setDoctorNotes(appt.notes || '');
-                        }}
-                        className="px-4 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
-                      >
-                        Mark as Completed
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setActiveAppointmentId(appt._id);
+                            setDoctorNotes(appt.notes || '');
+                          }}
+                          className="px-4 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
+                        >
+                          Mark as Completed
+                        </button>
+                        <button
+                          onClick={() => openPrescriptionForm(appt)}
+                          className="px-4 py-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-colors"
+                        >
+                          Create Prescription
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -473,6 +572,134 @@ const DoctorDashboard = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {prescribingAppointmentId && (
+        <div className="bg-white rounded-3xl border border-sky-200 p-6 shadow-xs space-y-5">
+          <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-4">
+            <div>
+              <h2 className="text-lg font-extrabold text-slate-900">Create e-Prescription</h2>
+              <p className="text-xs text-slate-500">Doctor-issued prescription for the selected consultation.</p>
+            </div>
+            <button
+              onClick={() => setPrescribingAppointmentId(null)}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Diagnosis</label>
+              <textarea
+                rows={2}
+                value={prescriptionForm.diagnosis}
+                onChange={(e) => setPrescriptionForm({ ...prescriptionForm, diagnosis: e.target.value })}
+                placeholder="Describe the clinical diagnosis"
+                className="w-full p-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-200"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700">Medicines</label>
+                <button
+                  type="button"
+                  onClick={addMedicationRow}
+                  className="text-xs font-bold text-sky-700 hover:text-sky-800"
+                >
+                  + Add medicine
+                </button>
+              </div>
+
+              {prescriptionForm.medications.map((med, index) => (
+                <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-2 p-3 border border-slate-200 rounded-xl bg-slate-50">
+                  <input
+                    value={med.name}
+                    onChange={(e) => updateMedicineField(index, 'name', e.target.value)}
+                    placeholder="Medicine"
+                    className="p-2 text-xs border border-slate-200 rounded-lg"
+                  />
+                  <input
+                    value={med.dosage}
+                    onChange={(e) => updateMedicineField(index, 'dosage', e.target.value)}
+                    placeholder="Dosage"
+                    className="p-2 text-xs border border-slate-200 rounded-lg"
+                  />
+                  <input
+                    value={med.frequency}
+                    onChange={(e) => updateMedicineField(index, 'frequency', e.target.value)}
+                    placeholder="Frequency"
+                    className="p-2 text-xs border border-slate-200 rounded-lg"
+                  />
+                  <input
+                    value={med.duration}
+                    onChange={(e) => updateMedicineField(index, 'duration', e.target.value)}
+                    placeholder="Duration"
+                    className="p-2 text-xs border border-slate-200 rounded-lg"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeMedicationRow(index)}
+                    className="px-2 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Instructions</label>
+                <textarea
+                  rows={2}
+                  value={prescriptionForm.instructions}
+                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, instructions: e.target.value })}
+                  placeholder="Patient guidance and usage notes"
+                  className="w-full p-3 text-sm border border-slate-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Follow-up date</label>
+                <input
+                  type="date"
+                  value={prescriptionForm.followUpDate}
+                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, followUpDate: e.target.value })}
+                  className="w-full p-3 text-sm border border-slate-200 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Additional notes</label>
+              <textarea
+                rows={2}
+                value={prescriptionForm.notes}
+                onChange={(e) => setPrescriptionForm({ ...prescriptionForm, notes: e.target.value })}
+                placeholder="Optional remarks for the patient"
+                className="w-full p-3 text-sm border border-slate-200 rounded-xl"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setPrescribingAppointmentId(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePrescription}
+                disabled={savingPrescription}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl disabled:opacity-60"
+              >
+                {savingPrescription ? 'Saving...' : 'Save Prescription'}
+              </button>
+            </div>
           </div>
         </div>
       )}

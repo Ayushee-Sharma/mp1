@@ -26,8 +26,10 @@ import Alert from '../components/common/Alert';
 const PatientDashboard = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [hospitals, setHospitals] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
 
@@ -35,9 +37,10 @@ const PatientDashboard = () => {
     try {
       setLoading(true);
       setError('');
-      const [apptRes, hospRes] = await Promise.allSettled([
+      const [apptRes, hospRes, prescriptionRes] = await Promise.allSettled([
         appointmentService.getAppointments(),
         hospitalService.getHospitals(),
+        appointmentService.getPrescriptions(),
       ]);
 
       if (apptRes.status === 'fulfilled' && apptRes.value.success) {
@@ -46,10 +49,14 @@ const PatientDashboard = () => {
       if (hospRes.status === 'fulfilled' && hospRes.value.success) {
         setHospitals(hospRes.value.hospitals.slice(0, 3));
       }
+      if (prescriptionRes.status === 'fulfilled' && prescriptionRes.value.success) {
+        setPrescriptions(prescriptionRes.value.prescriptions);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
+      setPrescriptionsLoading(false);
     }
   };
 
@@ -291,6 +298,34 @@ const PatientDashboard = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <Stethoscope className="w-4 h-4 text-sky-600" />
+                My Prescriptions
+              </h3>
+              <span className="text-[11px] font-semibold text-sky-700">{prescriptions.length}</span>
+            </div>
+
+            {prescriptionsLoading ? (
+              <LoadingSpinner size="sm" message="Loading prescriptions..." />
+            ) : prescriptions.length > 0 ? (
+              <div className="space-y-3">
+                {prescriptions.slice(0, 3).map((prescription) => (
+                  <div key={prescription._id} className="p-3 rounded-xl bg-sky-50 border border-sky-100">
+                    <div className="text-xs font-bold text-slate-900">{prescription.doctor?.name}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">{prescription.diagnosis}</div>
+                    <div className="text-[11px] text-sky-700 mt-2 font-semibold">
+                      {prescription.medications?.length || 0} prescribed medication(s)
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">No prescriptions yet for this patient.</p>
+            )}
           </div>
 
           {/* Healthcare Resource Preview */}

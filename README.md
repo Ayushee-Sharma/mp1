@@ -1,115 +1,109 @@
 # Reaching the Unreached
 
-A MERN fullstack application scaffolded with:
-- **Frontend**: React (Vite) + Tailwind CSS
-- **Backend**: Node.js + Express
-- **Database**: MongoDB Atlas (via Mongoose)
-
----
+A MERN full-stack healthcare booking application connecting rural communities with doctors, hospitals, and patient support services.
 
 ## Project Structure
 
 ```text
-reaching-the-unreached/
-├── client/                     # Frontend application (React + Vite + Tailwind CSS)
-│   ├── public/                 # Static public assets
+/workspaces/mp1
+├── backend/
 │   ├── src/
-│   │   ├── assets/             # Images, SVGs, icons
-│   │   ├── components/         # Reusable UI components
-│   │   │   ├── common/         # Generic elements (buttons, inputs, cards)
-│   │   │   └── layout/         # Layout components (navbar, footer, sidebar)
-│   │   ├── context/            # React Context API providers
-│   │   ├── hooks/              # Custom React hooks
-│   │   ├── pages/              # Page/view level components
-│   │   ├── services/           # API interaction and HTTP client setup
-│   │   ├── utils/              # Client-side utility functions and constants
-│   │   ├── App.jsx             # Main application component
-│   │   ├── index.css           # Tailwind CSS directives
-│   │   └── main.jsx            # React root mount entry point
-│   ├── .env.example            # Client environment variable template
-│   ├── index.html              # HTML shell
-│   ├── package.json            # Client dependencies and scripts
-│   ├── postcss.config.js       # PostCSS configuration for Tailwind
-│   ├── tailwind.config.js      # Tailwind CSS configuration
-│   └── vite.config.js          # Vite build and dev server config
-│
-├── server/                     # Backend application (Node.js + Express + Mongoose)
+│   ├── .env.example
+│   ├── .env
+│   ├── package.json
+│   └── ...
+├── frontend/
 │   ├── src/
-│   │   ├── config/             # Database and app configuration (MongoDB Atlas)
-│   │   ├── controllers/        # Request handling and controller layer
-│   │   ├── middleware/         # Express middleware (auth, error handlers, etc.)
-│   │   ├── models/             # Mongoose data schemas and models
-│   │   ├── routes/             # Express API route declarations
-│   │   ├── services/           # Business logic layer
-│   │   ├── utils/              # Server-side helper utilities
-│   │   ├── app.js              # Express app setup and middleware configuration
-│   │   └── server.js           # Server entry point and database connection initialization
-│   ├── .env.example            # Server environment variable template (MongoDB URI, etc.)
-│   └── package.json            # Server dependencies and scripts
-│
-├── .gitignore                  # Root Git ignore rules
-├── package.json                # Root package configuration for fullstack orchestration
-└── README.md                   # Project documentation
+│   ├── .env.example
+│   ├── package.json
+│   └── ...
+├── README.md
+├── package.json
+├── prompt.txt
+└── .gitignore
 ```
 
----
+## Environment setup
 
-## Getting Started
+Create the environment files for the current project structure:
 
-### 1. Prerequisites
-- **Node.js** (v18+ recommended)
-- **npm** (v9+ recommended)
-- A **MongoDB Atlas** cluster account and connection string
+### Backend
+Create [backend/.env](backend/.env) and paste your MongoDB Atlas connection string into `MONGO_URI`.
 
-### 2. Environment Configuration
-
-#### Backend (`server/.env`):
-Copy `server/.env.example` to `server/.env` and update the variables:
-```bash
-cp server/.env.example server/.env
-```
-Fill in your MongoDB Atlas connection URI:
 ```env
 PORT=5000
-NODE_ENV=development
-MONGO_URI=mongodb+srv://<username>:<password>@<cluster-url>.mongodb.net/<database-name>?retryWrites=true&w=majority
 CLIENT_URL=http://localhost:5173
+MONGO_URI=
+JWT_SECRET=change_this_to_a_long_random_secret
 ```
 
-#### Frontend (`client/.env`):
-Copy `client/.env.example` to `client/.env`:
+Use the example file as a template:
+
 ```bash
-cp client/.env.example client/.env
+cp backend/.env.example backend/.env
 ```
+
+> Paste your MongoDB Atlas connection string into `backend/.env` under `MONGO_URI`.
+
+### Frontend
+Create [frontend/.env](frontend/.env):
+
 ```env
 VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
-### 3. Installation
-
-Install all dependencies across root, server, and client:
 ```bash
-npm run install:all
+cp frontend/.env.example frontend/.env
 ```
 
-Alternatively, install individually:
-```bash
-# In server directory
-cd server
-npm install
+## Demo accounts
 
-# In client directory
-cd ../client
+The seed script creates the following local/demo accounts for testing:
+
+- Admin: `admin@example.com` / `password123`
+- Doctor: `doctor@example.com` / `password123`
+- Patient: `patient@example.com` / `password123`
+
+These accounts are for local development and demonstration only.
+
+## Run the app
+
+Install dependencies:
+
+```bash
 npm install
+npm install --prefix backend
+npm install --prefix frontend
 ```
 
-### 4. Running the Application
+Run both apps together:
 
-To run both client and server concurrently from the root directory:
 ```bash
 npm run dev
 ```
 
-Or run them in separate terminal tabs:
-- **Backend API**: `cd server && npm run dev` (Runs on `http://localhost:5000`)
-- **Frontend App**: `cd client && npm run dev` (Runs on `http://localhost:5173`)
+Or run separately:
+
+```bash
+npm run backend
+npm run frontend
+```
+
+## Seed demo data
+
+```bash
+npm run seed
+```
+
+This adds realistic sample doctors, patients, hospitals, and appointments while reusing existing records safely and avoiding duplicate creation on repeated runs.
+
+## Features included
+
+- Patient, doctor, and admin auth
+- Role-based access control
+- Doctor listing and specialization filters
+- Doctor profile and appointment booking
+- Appointment status tracking and cancellation
+- Hospital and bed availability display
+- Admin dashboard and doctor activation controls
+- Responsive UI with loading and error states

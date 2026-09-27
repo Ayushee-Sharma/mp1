@@ -7,6 +7,14 @@ import User from '../models/User.js';
 export const protect = async (req, res, next) => {
   let token;
 
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !secret.trim()) {
+    return res.status(500).json({
+      success: false,
+      message: 'JWT_SECRET is not configured. Set it in backend/.env.',
+    });
+  }
+
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith('Bearer')
@@ -14,10 +22,7 @@ export const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(' ')[1];
 
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET || 'reaching_the_unreached_jwt_secret_dev_2026_xyz!'
-      );
+      const decoded = jwt.verify(token, secret);
 
       req.user = await User.findById(decoded.id).select('-password');
 

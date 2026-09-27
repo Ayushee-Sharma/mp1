@@ -6,11 +6,13 @@ import jwt from 'jsonwebtoken';
  * @returns {string} Signed JWT token
  */
 export const generateToken = (id) => {
-  return jwt.sign(
-    { id },
-    process.env.JWT_SECRET || 'reaching_the_unreached_jwt_secret_dev_2026_xyz!',
-    {
-      expiresIn: '30d',
-    }
-  );
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret || !secret.trim()) {
+    throw new Error('JWT_SECRET is not configured. Set it in backend/.env.');
+  }
+
+  return jwt.sign({ id }, secret, {
+    expiresIn: '30d',
+  });
 };
