@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   HeartPulse,
@@ -19,39 +19,83 @@ import {
 import { doctorService } from '../services/doctorService';
 import { hospitalService } from '../services/hospitalService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import Alert from '../components/common/Alert';
 
 const HomePage = () => {
   const [featuredDoctors, setFeaturedDoctors] = useState([]);
   const [hospitalStats, setHospitalStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const initialFetchStarted = useRef(false);
+
+  const loadHomeData = async () => {
+    setLoading(true);
+    try {
+      const [docRes, hospRes] = await Promise.allSettled([
+        doctorService.getDoctors(),
+        hospitalService.getHospitals(),
+      ]);
+      const loadErrors = [];
+
+      if (docRes.status === 'fulfilled' && docRes.value.success) {
+        setFeaturedDoctors(docRes.value.doctors.slice(0, 4));
+      } else {
+        loadErrors.push(
+          docRes.status === 'rejected'
+            ? `Doctor list: ${docRes.reason.message}`
+            : 'Doctor list could not be loaded.'
+        );
+      }
+
+      if (hospRes.status === 'fulfilled' && hospRes.value.success) {
+        setHospitalStats(hospRes.value.stats);
+      } else {
+        loadErrors.push(
+          hospRes.status === 'rejected'
+            ? `Hospital information: ${hospRes.reason.message}`
+            : 'Hospital information could not be loaded.'
+        );
+      }
+      if (loadErrors.length) {
+        const staleDataNote =
+          featuredDoctors.length || hospitalStats
+            ? ' Previously loaded public information may be out of date.'
+            : '';
+        setError(`${loadErrors.join(' ')}${staleDataNote}`);
+      } else {
+        setError('');
+      }
+    } catch (err) {
+      setError(err.message || 'Home page information could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadHomeData = async () => {
-      try {
-        const [docRes, hospRes] = await Promise.allSettled([
-          doctorService.getDoctors(),
-          hospitalService.getHospitals(),
-        ]);
-
-        if (docRes.status === 'fulfilled' && docRes.value.success) {
-          setFeaturedDoctors(docRes.value.doctors.slice(0, 4));
-        }
-
-        if (hospRes.status === 'fulfilled' && hospRes.value.success) {
-          setHospitalStats(hospRes.value.stats);
-        }
-      } catch (err) {
-        console.error('Failed to load home data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadHomeData();
+    if (!initialFetchStarted.current) {
+      initialFetchStarted.current = true;
+      loadHomeData();
+    }
   }, []);
 
   return (
     <div className="space-y-16 pb-16">
+      {error && (
+        <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+          <div className="space-y-2">
+            <Alert type="error" message={error} />
+            <button
+              type="button"
+              onClick={loadHomeData}
+              disabled={loading}
+              className="text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+            >
+              {loading ? 'Retrying...' : 'Retry home information'}
+            </button>
+          </div>
+        </div>
+      )}
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-b from-emerald-50 via-teal-50/40 to-white pt-16 pb-20 border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -154,7 +198,11 @@ const HomePage = () => {
                       <div>
                         <div className="text-xs font-semibold text-slate-800">Emergency & Bed Status</div>
                         <div className="text-[11px] text-slate-500">
-                          {hospitalStats ? `${hospitalStats.availableBeds} beds available` : 'Real-time telemetry'}
+                          {hospitalStats
+                            ? `${hospitalStats.availableBeds} beds available`
+                            : loading
+                            ? 'Loading bed availability...'
+                            : 'Hospital information unavailable'}
                         </div>
                       </div>
                     </div>
@@ -342,6 +390,10 @@ const HomePage = () => {
                 </div>
               </div>
             ))}
+          </div>
+        ) : error ? (
+          <div className="text-center py-10 bg-slate-50 rounded-2xl">
+            <p className="text-sm text-slate-500">Doctor information is unavailable. Retry the request above.</p>
           </div>
         ) : (
           <div className="text-center py-10 bg-slate-50 rounded-2xl">

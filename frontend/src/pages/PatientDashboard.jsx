@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { appointmentService } from '../services/appointmentService';
@@ -28,30 +28,58 @@ const PatientDashboard = () => {
   const [appointments, setAppointments] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [hospitals, setHospitals] = useState([]);
+  const [appointmentsLoaded, setAppointmentsLoaded] = useState(false);
+  const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
+  const [hospitalDataLoaded, setHospitalDataLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const initialLoadStarted = useRef(false);
+  const hospitalsLoaded = useRef(false);
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      setPrescriptionsLoading(true);
       setError('');
       const [apptRes, hospRes, prescriptionRes] = await Promise.allSettled([
         appointmentService.getAppointments(),
-        hospitalService.getHospitals(),
+        hospitalsLoaded.current ? Promise.resolve(null) : hospitalService.getHospitals(),
         appointmentService.getPrescriptions(),
       ]);
+      const loadErrors = [];
 
       if (apptRes.status === 'fulfilled' && apptRes.value.success) {
         setAppointments(apptRes.value.appointments);
+        setAppointmentsLoaded(true);
+      } else {
+        loadErrors.push(
+          apptRes.status === 'rejected'
+            ? `Appointments: ${apptRes.reason.message}`
+            : 'Appointments could not be loaded.'
+        );
       }
-      if (hospRes.status === 'fulfilled' && hospRes.value.success) {
+      if (hospRes.status === 'fulfilled' && hospRes.value?.success) {
         setHospitals(hospRes.value.hospitals.slice(0, 3));
+        hospitalsLoaded.current = true;
+        setHospitalDataLoaded(true);
+      } else if (hospRes.status === 'rejected') {
+        loadErrors.push(`Hospital information: ${hospRes.reason.message}`);
+      } else if (hospRes.value) {
+        loadErrors.push('Hospital information could not be loaded.');
       }
       if (prescriptionRes.status === 'fulfilled' && prescriptionRes.value.success) {
         setPrescriptions(prescriptionRes.value.prescriptions);
+        setPrescriptionsLoaded(true);
+      } else {
+        loadErrors.push(
+          prescriptionRes.status === 'rejected'
+            ? `Prescriptions: ${prescriptionRes.reason.message}`
+            : 'Prescriptions could not be loaded.'
+        );
       }
+      if (loadErrors.length) setError(loadErrors.join(' '));
     } catch (err) {
       setError(err.message || 'Failed to load dashboard data');
     } finally {
@@ -61,7 +89,10 @@ const PatientDashboard = () => {
   };
 
   useEffect(() => {
-    loadDashboardData();
+    if (!initialLoadStarted.current) {
+      initialLoadStarted.current = true;
+      loadDashboardData();
+    }
   }, []);
 
   const handleCancelAppointment = async (id) => {
@@ -137,7 +168,19 @@ const PatientDashboard = () => {
       {actionSuccess && (
         <Alert type="success" message={actionSuccess} onClose={() => setActionSuccess('')} />
       )}
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {error && (
+        <div className="space-y-2">
+          <Alert type="error" message={error} onClose={() => setError('')} />
+          <button
+            type="button"
+            onClick={loadDashboardData}
+            disabled={loading}
+            className="text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+          >
+            {loading ? 'Retrying...' : 'Retry loading dashboard'}
+          </button>
+        </div>
+      )}
 
       {/* Main Grid: Appointments (Left) + Profile & Resources (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -151,12 +194,14 @@ const PatientDashboard = () => {
                 <p className="text-xs text-slate-500">Scheduled visits requiring doctor review</p>
               </div>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-                {upcomingAppointments.length} Active
+                {appointmentsLoaded ? upcomingAppointments.length : '—'} Active
               </span>
             </div>
 
             {loading ? (
               <LoadingSpinner size="sm" message="Loading appointments..." />
+            ) : !appointmentsLoaded ? (
+              <p className="text-xs text-rose-700">Appointment information is unavailable. Retry loading the dashboard.</p>
             ) : upcomingAppointments.length > 0 ? (
               <div className="space-y-4">
                 {upcomingAppointments.map((appt) => (
@@ -246,7 +291,11 @@ const PatientDashboard = () => {
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
             <h2 className="text-base font-extrabold text-slate-900">Previous Consultation History</h2>
 
-            {pastAppointments.length > 0 ? (
+            {loading ? (
+              <LoadingSpinner size="sm" message="Loading consultation history..." />
+            ) : !appointmentsLoaded ? (
+              <p className="text-xs text-rose-700">Consultation history is unavailable. Retry loading the dashboard.</p>
+            ) : pastAppointments.length > 0 ? (
               <div className="divide-y divide-slate-100">
                 {pastAppointments.map((appt) => (
                   <div key={appt._id} className="py-3.5 flex items-center justify-between gap-4">
@@ -329,11 +378,15 @@ const PatientDashboard = () => {
                 <Stethoscope className="w-4 h-4 text-sky-600" />
                 My Prescriptions
               </h3>
-              <span className="text-[11px] font-semibold text-sky-700">{prescriptions.length}</span>
+              <span className="text-[11px] font-semibold text-sky-700">
+                {prescriptionsLoaded ? prescriptions.length : '—'}
+              </span>
             </div>
 
             {prescriptionsLoading ? (
               <LoadingSpinner size="sm" message="Loading prescriptions..." />
+            ) : !prescriptionsLoaded ? (
+              <p className="text-xs text-rose-700">Prescription information is unavailable. Retry loading the dashboard.</p>
             ) : prescriptions.length > 0 ? (
               <div className="space-y-3">
                 {prescriptions.slice(0, 3).map((prescription) => (
@@ -427,8 +480,12 @@ const PatientDashboard = () => {
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : loading ? (
               <p className="text-xs text-slate-400">Loading nearby facilities...</p>
+            ) : hospitalDataLoaded ? (
+              <p className="text-xs text-slate-500">No hospital facilities are currently listed.</p>
+            ) : (
+              <p className="text-xs text-slate-500">Hospital information is unavailable. Retry loading the dashboard.</p>
             )}
           </div>
         </div>

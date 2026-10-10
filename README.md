@@ -63,8 +63,8 @@ MongoDB stores the application data.
 │   ├── .env
 │   └── package.json
 ├── README.md
-├── ppt_instructions.txt
-├── report_instructions.txt
+├── ppt_instructions.md
+├── report_instructions.md
 ├── package.json
 └── prompt.txt
 ```

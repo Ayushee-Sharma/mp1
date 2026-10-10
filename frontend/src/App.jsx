@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/routing/ProtectedRoute';
+import ConnectionStatus from './components/common/ConnectionStatus';
 
 import HomePage from './pages/HomePage';
 import FindDoctorsPage from './pages/FindDoctorsPage';
@@ -23,6 +24,7 @@ function App() {
       <AuthProvider>
         <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 antialiased font-sans selection:bg-emerald-500 selection:text-white">
           <Navbar />
+          <ConnectionStatus />
           <main className="flex-1">
             <Routes>
               {/* Public Routes */}

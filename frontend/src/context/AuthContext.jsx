@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext(null);
@@ -10,12 +10,16 @@ export const AuthProvider = ({ children }) => {
   });
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const authInitializationStarted = useRef(false);
 
   // Validate existing token and refresh user profile on app load
   useEffect(() => {
+    if (authInitializationStarted.current) return;
+    authInitializationStarted.current = true;
+
     const initAuth = async () => {
       const storedToken = localStorage.getItem('token');
-      if (storedToken) {
+      if (storedToken && navigator.onLine) {
         try {
           const res = await authService.getMe();
           if (res.success && res.user) {
@@ -23,8 +27,10 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('user', JSON.stringify(res.user));
           }
         } catch (error) {
-          console.error('[Auth Init Error] Token invalid or expired:', error.message);
-          logout();
+          console.error('[Auth Init Error]:', error.message);
+          if (error.status === 401) {
+            logout();
+          }
         }
       }
       setLoading(false);

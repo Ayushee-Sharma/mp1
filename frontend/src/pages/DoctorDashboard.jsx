@@ -38,6 +38,8 @@ const DoctorDashboard = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
+  const [appointmentsLoaded, setAppointmentsLoaded] = useState(false);
+  const [prescriptionsLoaded, setPrescriptionsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState('requests'); // requests | upcoming | availability | all
   const [loading, setLoading] = useState(true);
   const [prescribingAppointmentId, setPrescribingAppointmentId] = useState(null);
@@ -55,6 +57,7 @@ const DoctorDashboard = () => {
   const prescriptionRequestLock = useRef(false);
   const [error, setError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const initialLoadStarted = useRef(false);
 
   // Doctor availability state
   const [availabilitySchedule, setAvailabilitySchedule] = useState([]);
@@ -100,6 +103,7 @@ const DoctorDashboard = () => {
 
       if (appointmentsResult.status === 'fulfilled' && appointmentsResult.value.success) {
         setAppointments(appointmentsResult.value.appointments);
+        setAppointmentsLoaded(true);
       } else {
         loadErrors.push(
           appointmentsResult.status === 'rejected'
@@ -110,6 +114,7 @@ const DoctorDashboard = () => {
 
       if (prescriptionsResult.status === 'fulfilled' && prescriptionsResult.value.success) {
         setPrescriptions(prescriptionsResult.value.prescriptions);
+        setPrescriptionsLoaded(true);
       } else {
         loadErrors.push(
           prescriptionsResult.status === 'rejected'
@@ -131,7 +136,10 @@ const DoctorDashboard = () => {
   };
 
   useEffect(() => {
-    loadDoctorData();
+    if (!initialLoadStarted.current) {
+      initialLoadStarted.current = true;
+      loadDoctorData();
+    }
   }, []);
 
   const handleStatusChange = async (id, newStatus, notes = '') => {
@@ -446,7 +454,19 @@ const DoctorDashboard = () => {
       {actionSuccess && (
         <Alert type="success" message={actionSuccess} onClose={() => setActionSuccess('')} />
       )}
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {error && (
+        <div className="space-y-2">
+          <Alert type="error" message={error} onClose={() => setError('')} />
+          <button
+            type="button"
+            onClick={loadDoctorData}
+            disabled={loading}
+            className="text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+          >
+            {loading ? 'Retrying...' : 'Retry loading dashboard'}
+          </button>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -455,7 +475,7 @@ const DoctorDashboard = () => {
             Pending Requests
           </div>
           <div className="text-2xl font-extrabold text-amber-600 mt-1">
-            {pendingRequests.length}
+            {appointmentsLoaded ? pendingRequests.length : '—'}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">Require review</div>
         </div>
@@ -465,7 +485,7 @@ const DoctorDashboard = () => {
             Confirmed Visits
           </div>
           <div className="text-2xl font-extrabold text-emerald-600 mt-1">
-            {confirmedAppointments.length}
+            {appointmentsLoaded ? confirmedAppointments.length : '—'}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">Upcoming scheduled</div>
         </div>
@@ -485,7 +505,7 @@ const DoctorDashboard = () => {
             Total Consultations
           </div>
           <div className="text-2xl font-extrabold text-slate-900 mt-1">
-            {appointments.length}
+            {appointmentsLoaded ? appointments.length : '—'}
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">All time records</div>
         </div>
@@ -494,10 +514,10 @@ const DoctorDashboard = () => {
       {/* Navigation Tabs */}
       <div className="flex border-b border-slate-200 overflow-x-auto gap-2">
         {[
-          { key: 'requests', label: `Pending Requests (${pendingRequests.length})` },
-          { key: 'upcoming', label: `Confirmed (${confirmedAppointments.length})` },
-          { key: 'all', label: `All Consultations (${appointments.length})` },
-          { key: 'prescriptions', label: `Prescriptions (${prescriptions.length})` },
+          { key: 'requests', label: `Pending Requests (${appointmentsLoaded ? pendingRequests.length : '—'})` },
+          { key: 'upcoming', label: `Confirmed (${appointmentsLoaded ? confirmedAppointments.length : '—'})` },
+          { key: 'all', label: `All Consultations (${appointmentsLoaded ? appointments.length : '—'})` },
+          { key: 'prescriptions', label: `Prescriptions (${prescriptionsLoaded ? prescriptions.length : '—'})` },
           { key: 'availability', label: 'Availability Schedules' },
         ].map((tab) => (
           <button
@@ -528,6 +548,8 @@ const DoctorDashboard = () => {
 
           {loading ? (
             <LoadingSpinner message="Loading requests..." />
+          ) : !appointmentsLoaded ? (
+            <p className="text-xs text-rose-700">Appointment requests are unavailable. Retry loading the dashboard.</p>
           ) : pendingRequests.length > 0 ? (
             <div className="space-y-4">
               {pendingRequests.map((appt) => (
@@ -606,7 +628,11 @@ const DoctorDashboard = () => {
             Confirmed Patient Appointments
           </h2>
 
-          {confirmedAppointments.length > 0 ? (
+          {loading ? (
+            <LoadingSpinner message="Loading confirmed appointments..." />
+          ) : !appointmentsLoaded ? (
+            <p className="text-xs text-rose-700">Appointment information is unavailable. Retry loading the dashboard.</p>
+          ) : confirmedAppointments.length > 0 ? (
             <div className="space-y-4">
               {confirmedAppointments.map((appt) => (
                 <div
@@ -711,6 +737,11 @@ const DoctorDashboard = () => {
       {/* Tab 3: All Appointments History */}
       {activeTab === 'all' && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+          {loading ? (
+            <LoadingSpinner message="Loading appointment history..." />
+          ) : !appointmentsLoaded ? (
+            <p className="p-6 text-xs text-rose-700">Appointment history is unavailable. Retry loading the dashboard.</p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-bold border-b border-slate-200">
@@ -765,6 +796,7 @@ const DoctorDashboard = () => {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 
@@ -781,6 +813,8 @@ const DoctorDashboard = () => {
 
           {loading ? (
             <LoadingSpinner message="Loading prescriptions..." />
+          ) : !prescriptionsLoaded ? (
+            <p className="text-xs text-rose-700">Prescription information is unavailable. Retry loading the dashboard.</p>
           ) : prescriptions.length > 0 ? (
             <div className="space-y-4">
               {prescriptions.map((prescription) => (
@@ -888,7 +922,7 @@ const DoctorDashboard = () => {
           )}
 
           <fieldset
-            disabled={Boolean(prescriptionSavedMessage)}
+            disabled={savingPrescription || Boolean(prescriptionSavedMessage)}
             className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-70"
           >
             <div>

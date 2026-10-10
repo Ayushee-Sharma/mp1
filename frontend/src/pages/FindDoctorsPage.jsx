@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search,
@@ -23,11 +23,11 @@ const FindDoctorsPage = () => {
   const [selectedSpec, setSelectedSpec] = useState('All');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const initialFetchStarted = useRef(false);
 
   const fetchDoctors = async (query = '', spec = 'All') => {
     try {
       setLoading(true);
-      setError('');
       const params = {};
       if (query.trim()) params.search = query.trim();
       if (spec !== 'All') params.specialization = spec;
@@ -35,19 +35,29 @@ const FindDoctorsPage = () => {
       const data = await doctorService.getDoctors(params);
       if (data.success) {
         setDoctors(data.doctors);
+        setError('');
         if (data.specializations && data.specializations.length > 0) {
           setSpecializations(['All', ...data.specializations]);
         }
+      } else {
+        setError(data.message || 'The doctor list could not be loaded.');
       }
     } catch (err) {
-      setError(err.message || 'Failed to load doctors list');
+      setError(
+        `${err.message || 'Failed to load doctors list'}${
+          doctors.length ? ' Previously loaded results may be out of date.' : ''
+        }`
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDoctors();
+    if (!initialFetchStarted.current) {
+      initialFetchStarted.current = true;
+      fetchDoctors();
+    }
   }, []);
 
   const handleSearchSubmit = (e) => {
@@ -119,7 +129,19 @@ const FindDoctorsPage = () => {
         )}
       </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {error && (
+        <div className="space-y-2">
+          <Alert type="error" message={error} />
+          <button
+            type="button"
+            onClick={() => fetchDoctors(search, selectedSpec)}
+            disabled={loading}
+            className="text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+          >
+            {loading ? 'Retrying...' : 'Retry doctor list'}
+          </button>
+        </div>
+      )}
 
       {/* Doctor Cards Grid */}
       {loading ? (
@@ -206,6 +228,12 @@ const FindDoctorsPage = () => {
               </div>
             </div>
           ))}
+        </div>
+      ) : error ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+          <Stethoscope className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-slate-800">Doctor list unavailable</h3>
+          <p className="text-xs text-slate-500 mt-1">Check your connection and retry the request.</p>
         </div>
       ) : (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">

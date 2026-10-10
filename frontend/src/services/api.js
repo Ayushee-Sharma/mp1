@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -26,9 +27,13 @@ api.interceptors.response.use(
     const message =
       error.response?.data?.message ||
       error.response?.data?.error ||
-      error.message ||
-      'An unexpected network error occurred';
-    return Promise.reject(new Error(message));
+      (!error.response
+        ? 'Unable to reach the server. Check your connection and try again.'
+        : error.message || 'An unexpected request error occurred');
+    const formattedError = new Error(message);
+    formattedError.status = error.response?.status;
+    formattedError.isNetworkError = !error.response;
+    return Promise.reject(formattedError);
   }
 );
 

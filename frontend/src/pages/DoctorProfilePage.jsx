@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   MapPin,
@@ -33,6 +33,7 @@ const DoctorProfilePage = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [slotsData, setSlotsData] = useState(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [reason, setReason] = useState('');
   const [patientName, setPatientName] = useState(user?.name || '');
@@ -43,6 +44,12 @@ const DoctorProfilePage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const [bookingSuccess, setBookingSuccess] = useState(null);
+  const [bookingOutcomeUncertain, setBookingOutcomeUncertain] = useState(false);
+  const [bookingRetryAllowed, setBookingRetryAllowed] = useState(false);
+  const bookingRequestLock = useRef(false);
+  const pendingBookingPayload = useRef(null);
+  const lastDoctorRequestId = useRef(null);
+  const lastSlotsRequestKey = useRef(null);
 
   // Initialize default date (tomorrow)
   useEffect(() => {
@@ -54,52 +61,143 @@ const DoctorProfilePage = () => {
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
   }, []);
 
-  // Fetch Doctor profile
-  useEffect(() => {
-    const fetchDoc = async () => {
-      try {
-        setLoading(true);
-        const data = await doctorService.getDoctorById(id);
-        if (data.success) {
-          setDoctor(data.doctor);
-        }
-      } catch (err) {
-        setError(err.message || 'Failed to load doctor profile');
-      } finally {
-        setLoading(false);
+  const fetchDoctor = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await doctorService.getDoctorById(id);
+      if (data.success) {
+        setDoctor(data.doctor);
+      } else {
+        setError(data.message || 'Doctor profile could not be loaded.');
       }
-    };
-
-    fetchDoc();
-  }, [id]);
+    } catch (err) {
+      setError(err.message || 'Failed to load doctor profile');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch available slots whenever date or doctor changes
-  useEffect(() => {
+  const refreshAvailableSlots = async () => {
     if (!id || !selectedDate) return;
 
-    const fetchSlots = async () => {
-      try {
-        setSlotsLoading(true);
-        setBookingError('');
-        setSelectedTime(''); // Reset selection when date changes
-        const res = await doctorService.getAvailableSlots(id, selectedDate);
-        if (res.success) {
-          setSlotsData(res);
-        }
-      } catch (err) {
-        console.error('Failed to calculate slot availability:', err);
-      } finally {
-        setSlotsLoading(false);
+    try {
+      setSlotsLoading(true);
+      setSlotsError('');
+      setSlotsData(null);
+      const res = await doctorService.getAvailableSlots(id, selectedDate);
+      if (!res.success) {
+        throw new Error(res.message || 'Available appointment slots could not be loaded.');
       }
-    };
+      setSlotsData(res);
+      if (res.slots?.find((slot) => slot.time === selectedTime)?.isBooked) {
+        setSelectedTime('');
+      }
+    } catch (err) {
+      setSlotsError(err.message || 'Failed to load appointment slots.');
+    } finally {
+      setSlotsLoading(false);
+    }
+  };
 
-    fetchSlots();
+  useEffect(() => {
+    if (lastDoctorRequestId.current !== id) {
+      lastDoctorRequestId.current = id;
+      fetchDoctor();
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !selectedDate) return;
+    const requestKey = `${id}:${selectedDate}`;
+    if (lastSlotsRequestKey.current === requestKey) return;
+    lastSlotsRequestKey.current = requestKey;
+    setSelectedTime('');
+    refreshAvailableSlots();
   }, [id, selectedDate]);
+
+  const findMatchingBooking = (appointments, payload) =>
+    appointments?.find((appointment) => {
+      const doctorId =
+        typeof appointment.doctor === 'string'
+          ? appointment.doctor
+          : appointment.doctor?._id;
+      return (
+        String(doctorId || '') === String(payload.doctorId) &&
+        appointment.date === payload.date &&
+        appointment.time === payload.time &&
+        ['Pending', 'Confirmed'].includes(appointment.status)
+      );
+    });
+
+  const checkBookingStatus = async (originalError, payload, manualCheck = false) => {
+    const result = await appointmentService.getAppointments();
+    if (!result.success || !Array.isArray(result.appointments)) {
+      throw new Error(result.message || 'The server could not confirm the booking status.');
+    }
+
+    const existingBooking = findMatchingBooking(result.appointments, payload);
+    if (existingBooking) {
+      setBookingSuccess(existingBooking);
+      setBookingOutcomeUncertain(false);
+      setBookingRetryAllowed(false);
+      setBookingError('');
+      pendingBookingPayload.current = null;
+      refreshAvailableSlots();
+      return;
+    }
+
+    if (originalError?.isNetworkError && !manualCheck) {
+      setBookingOutcomeUncertain(true);
+      setBookingRetryAllowed(false);
+      setBookingError(
+        'The connection was interrupted and no matching booking is visible yet. Check the booking status before trying again.'
+      );
+      return;
+    }
+
+    setBookingOutcomeUncertain(false);
+    setBookingRetryAllowed(true);
+    pendingBookingPayload.current = null;
+    setBookingError(
+      manualCheck
+        ? 'No matching active booking was found. The request was not confirmed, so you can safely retry.'
+        : `${originalError.message || 'The booking could not be completed.'} No matching active booking was found. Check slot availability before retrying.`
+    );
+    refreshAvailableSlots();
+  };
+
+  const handleCheckBookingStatus = async () => {
+    if (bookingRequestLock.current) return;
+    bookingRequestLock.current = true;
+    setSubmitting(true);
+    setBookingError('');
+    try {
+      if (!pendingBookingPayload.current) {
+        throw new Error('The original booking details are not available to check.');
+      }
+      await checkBookingStatus(
+        new Error('Booking status is not yet confirmed.'),
+        pendingBookingPayload.current,
+        true
+      );
+    } catch (err) {
+      setBookingOutcomeUncertain(true);
+      setBookingError(
+        `${err.message || 'Unable to check booking status.'} Do not submit again until the server can be checked.`
+      );
+    } finally {
+      bookingRequestLock.current = false;
+      setSubmitting(false);
+    }
+  };
 
   // Handle appointment booking submission
   const handleBooking = async (e) => {
     e.preventDefault();
     setBookingError('');
+    if (bookingRequestLock.current || bookingOutcomeUncertain) return;
 
     if (!isAuthenticated) {
       navigate('/login', { state: { from: `/doctors/${id}` } });
@@ -121,34 +219,42 @@ const DoctorProfilePage = () => {
       return;
     }
 
-    try {
-      setSubmitting(true);
-      const payload = {
-        doctorId: doctor._id,
-        date: selectedDate,
-        time: selectedTime,
-        reason: reason.trim(),
-        patientName: patientName || user.name,
-        patientPhone: patientPhone || user.phone || '9999999999',
-        patientAge: patientAge ? Number(patientAge) : undefined,
-        patientGender,
-      };
+    const payload = {
+      doctorId: doctor._id,
+      date: selectedDate,
+      time: selectedTime,
+      reason: reason.trim(),
+      patientName: patientName || user.name,
+      patientPhone: patientPhone || user.phone || '9999999999',
+      patientAge: patientAge ? Number(patientAge) : undefined,
+      patientGender,
+    };
 
+    bookingRequestLock.current = true;
+    pendingBookingPayload.current = payload;
+    setBookingRetryAllowed(false);
+    setSubmitting(true);
+    try {
       const res = await appointmentService.createAppointment(payload);
-      if (res.success) {
-        setBookingSuccess(res.appointment);
-        // Refresh slots so the newly booked slot shows as booked
-        const updatedSlots = await doctorService.getAvailableSlots(id, selectedDate);
-        if (updatedSlots.success) setSlotsData(updatedSlots);
+      if (!res.success || !res.appointment) {
+        throw new Error(res.message || 'The server did not confirm the appointment booking.');
       }
+      setBookingSuccess(res.appointment);
+      pendingBookingPayload.current = null;
+      refreshAvailableSlots();
     } catch (err) {
-      setBookingError(err.message || 'Failed to confirm booking.');
-      // Refresh slots on double-booking error
       try {
-        const refreshed = await doctorService.getAvailableSlots(id, selectedDate);
-        if (refreshed.success) setSlotsData(refreshed);
-      } catch {}
+        await checkBookingStatus(err, payload);
+      } catch (statusError) {
+        setBookingOutcomeUncertain(true);
+        setBookingRetryAllowed(false);
+        setBookingError(
+          `${err.message || 'The booking request failed.'} The save status could not be checked: ${statusError.message || 'server unavailable'}. Check the booking status before retrying.`
+        );
+      }
+      refreshAvailableSlots();
     } finally {
+      bookingRequestLock.current = false;
       setSubmitting(false);
     }
   };
@@ -165,6 +271,16 @@ const DoctorProfilePage = () => {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12">
         <Alert type="error" message={error || 'Doctor not found'} />
+        {error && (
+          <button
+            type="button"
+            onClick={fetchDoctor}
+            disabled={loading}
+            className="mt-3 text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+          >
+            {loading ? 'Retrying...' : 'Retry loading doctor profile'}
+          </button>
+        )}
         <Link
           to="/doctors"
           className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"
@@ -369,11 +485,23 @@ const DoctorProfilePage = () => {
             ) : (
               <form onSubmit={handleBooking} className="space-y-4">
                 {bookingError && (
-                  <Alert
-                    type="error"
-                    message={bookingError}
-                    onClose={() => setBookingError('')}
-                  />
+                  <div className="space-y-2">
+                    <Alert
+                      type="error"
+                      message={bookingError}
+                      onClose={() => setBookingError('')}
+                    />
+                    {bookingOutcomeUncertain && (
+                      <button
+                        type="button"
+                        onClick={handleCheckBookingStatus}
+                        disabled={submitting}
+                        className="text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+                      >
+                        {submitting ? 'Checking booking status...' : 'Check booking status'}
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {/* 1. Date Picker */}
@@ -386,6 +514,7 @@ const DoctorProfilePage = () => {
                     min={new Date().toISOString().split('T')[0]}
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
+                    disabled={submitting || bookingOutcomeUncertain}
                     className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
                     required
                   />
@@ -413,6 +542,18 @@ const DoctorProfilePage = () => {
                     <div className="py-4 text-center">
                       <LoadingSpinner size="sm" message="Checking live availability..." />
                     </div>
+                  ) : slotsError ? (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                      <p>{slotsError}</p>
+                      <button
+                        type="button"
+                        onClick={refreshAvailableSlots}
+                        disabled={slotsLoading}
+                        className="mt-2 font-semibold underline disabled:opacity-50"
+                      >
+                        Retry availability check
+                      </button>
+                    </div>
                   ) : slotsData?.isDayAvailable === false ? (
                     <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
                       Doctor does not have scheduled slots on this day. Please select another date.
@@ -425,7 +566,7 @@ const DoctorProfilePage = () => {
                           <button
                             key={sIdx}
                             type="button"
-                            disabled={slot.isBooked}
+                            disabled={slot.isBooked || submitting || bookingOutcomeUncertain}
                             onClick={() => setSelectedTime(slot.time)}
                             className={`py-2 px-2.5 text-xs font-semibold rounded-xl border transition-all text-center flex items-center justify-center gap-1.5 ${
                               slot.isBooked
@@ -461,6 +602,7 @@ const DoctorProfilePage = () => {
                     placeholder="Briefly state symptoms, duration, or medical assistance needed..."
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
+                    disabled={submitting || bookingOutcomeUncertain}
                     className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
                     required
                   />
@@ -477,11 +619,21 @@ const DoctorProfilePage = () => {
                 {/* Submit button */}
                 <button
                   type="submit"
-                  disabled={submitting || !selectedTime || slotsData?.isDayAvailable === false}
+                  disabled={
+                    submitting ||
+                    slotsLoading ||
+                    bookingOutcomeUncertain ||
+                    !selectedTime ||
+                    slotsData?.isDayAvailable === false
+                  }
                   className="w-full py-3.5 px-4 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.01]"
                 >
                   {submitting
-                    ? 'Validating & Booking...'
+                    ? bookingOutcomeUncertain
+                      ? 'Checking booking status...'
+                      : 'Validating & Booking...'
+                    : bookingRetryAllowed
+                    ? 'Retry Booking'
                     : !isAuthenticated
                     ? 'Login to Book Appointment'
                     : selectedTime

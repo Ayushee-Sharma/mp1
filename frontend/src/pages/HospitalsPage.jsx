@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { hospitalService } from '../services/hospitalService';
 import {
   Hospital,
@@ -20,24 +20,35 @@ const HospitalsPage = () => {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const initialFetchStarted = useRef(false);
+
+  const fetchHospitals = async () => {
+    try {
+      setLoading(true);
+      const data = await hospitalService.getHospitals();
+      if (data.success) {
+        setHospitals(data.hospitals);
+        setStats(data.stats);
+        setError('');
+      } else {
+        setError(data.message || 'Hospital information could not be loaded.');
+      }
+    } catch (err) {
+      setError(
+        `${err.message || 'Failed to retrieve hospital capacities'}${
+          hospitals.length ? ' Previously loaded bed information may be out of date.' : ''
+        }`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchHospitals = async () => {
-      try {
-        setLoading(true);
-        const data = await hospitalService.getHospitals();
-        if (data.success) {
-          setHospitals(data.hospitals);
-          setStats(data.stats);
-        }
-      } catch (err) {
-        setError(err.message || 'Failed to retrieve hospital capacities');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHospitals();
+    if (!initialFetchStarted.current) {
+      initialFetchStarted.current = true;
+      fetchHospitals();
+    }
   }, []);
 
   const filteredHospitals = hospitals.filter(
@@ -62,7 +73,19 @@ const HospitalsPage = () => {
         </p>
       </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {error && (
+        <div className="space-y-2">
+          <Alert type="error" message={error} />
+          <button
+            type="button"
+            onClick={fetchHospitals}
+            disabled={loading}
+            className="text-xs font-semibold text-emerald-700 underline disabled:opacity-50"
+          >
+            {loading ? 'Retrying...' : 'Retry hospital list'}
+          </button>
+        </div>
+      )}
 
       {/* Bed Stats Bar */}
       {stats && (
@@ -198,6 +221,11 @@ const HospitalsPage = () => {
               </div>
             );
           })}
+        </div>
+      ) : error ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+          <Hospital className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs text-slate-600">Hospital information is unavailable right now.</p>
         </div>
       ) : (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
