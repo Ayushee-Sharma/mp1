@@ -33,8 +33,8 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
-  const login = async (email, password) => {
-    const data = await authService.login({ email, password });
+  const login = async (email, password, role) => {
+    const data = await authService.login({ email, password, role });
     if (data.success && data.token) {
       setToken(data.token);
       setUser(data.user);

@@ -77,7 +77,12 @@ MongoDB stores the application data.
 4. Start the frontend dev server.
 5. Open the app in the browser and test login, appointment, and prescription flows.
 
+## Development Account Selection
+
+When running the Vite development server, choose **Patient/User** or **Doctor** on the login page and select an existing account to fill in its login email and the shared demonstration password. Sign in with the regular **Sign In** button; authentication still uses the normal email/password endpoint and password verification. The current patient and doctor accounts were verified to use the shared demonstration password.
+
+Choose **Admin** to sign in with the administrator's existing credentials. Account selection is hidden from production frontend builds, and the account-list API is unavailable when the backend runs with `NODE_ENV=production`. To switch users, log out and select the next account.
+
 ## Notes for Developers
 
 The project was implemented and validated against the requirement source in `prompt.txt`. The working flow includes registration, authentication, doctor discovery, appointment booking, duplicate prevention, prescription creation, and admin metrics.
-

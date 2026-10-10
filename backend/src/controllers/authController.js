@@ -160,7 +160,14 @@ export const register = async (req, res) => {
  */
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
+
+    if (role && !['patient', 'doctor', 'admin'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a valid account role.',
+      });
+    }
 
     if (!email || !password) {
       return res.status(400).json({
@@ -176,6 +183,13 @@ export const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid email address or password',
+      });
+    }
+
+    if (role && role !== user.role) {
+      return res.status(403).json({
+        success: false,
+        message: `This account does not have the selected ${role} role.`,
       });
     }
 
@@ -207,6 +221,63 @@ export const login = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Server error occurred during login',
+    });
+  }
+};
+
+/**
+ * @desc    List linked patient or doctor login accounts for the development login selector
+ * @route   GET /api/auth/accounts?role=patient|doctor
+ * @access  Development only
+ */
+export const getLoginAccounts = async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ success: false, message: 'Account selection is unavailable.' });
+  }
+
+  const { role } = req.query;
+  if (!['patient', 'doctor'].includes(role)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Choose either the patient or doctor role.',
+    });
+  }
+
+  try {
+    const [users, patients, doctors] = await Promise.all([
+      User.find({ role }).select('email').lean(),
+      Patient.find().select('user name').lean(),
+      Doctor.find().select('user name specialization').lean(),
+    ]);
+
+    const profilesByUserId = new Map();
+    for (const profile of [
+      ...patients.map((patient) => ({ ...patient, role: 'patient' })),
+      ...doctors.map((doctor) => ({ ...doctor, role: 'doctor' })),
+    ]) {
+      if (!profile.user) continue;
+      const userId = String(profile.user);
+      profilesByUserId.set(userId, [...(profilesByUserId.get(userId) || []), profile]);
+    }
+
+    const accounts = users.flatMap((user) => {
+      const profiles = profilesByUserId.get(String(user._id)) || [];
+      if (profiles.length !== 1 || profiles[0].role !== role) return [];
+
+      const profile = profiles[0];
+      return [{
+        name: profile.name,
+        email: user.email,
+        ...(role === 'doctor' ? { specialization: profile.specialization } : {}),
+      }];
+    }).sort((first, second) => first.name.localeCompare(second.name));
+
+    return res.status(200).json({ success: true, accounts });
+  } catch (error) {
+    console.error('[Login Account List Error]:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve login accounts.',
     });
   }
 };

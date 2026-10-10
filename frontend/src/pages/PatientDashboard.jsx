@@ -88,6 +88,17 @@ const PatientDashboard = () => {
   const pastAppointments = appointments.filter(
     (a) => a.status === 'Completed' || a.status === 'Cancelled' || a.status === 'Rejected' || a.date < todayStr
   );
+  const prescriptionAppointmentIds = new Set(
+    prescriptions
+      .map((prescription) => {
+        const appointment = prescription.appointment;
+        return typeof appointment === 'string' ? appointment : appointment?._id;
+      })
+      .filter(Boolean)
+      .map(String)
+  );
+  const hasPrescriptionForAppointment = (appointmentId) =>
+    prescriptionAppointmentIds.has(String(appointmentId));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -168,6 +179,11 @@ const PatientDashboard = () => {
                         </div>
                       </div>
                       <StatusBadge status={appt.status} />
+                      {hasPrescriptionForAppointment(appt._id) && (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                          Prescription issued
+                        </span>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-slate-600 bg-white p-3 rounded-xl border border-slate-100">
@@ -242,7 +258,14 @@ const PatientDashboard = () => {
                         {appt.date} at {appt.time} • {appt.reason}
                       </div>
                     </div>
-                    <StatusBadge status={appt.status} size="sm" />
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      {hasPrescriptionForAppointment(appt._id) && (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                          Prescription issued
+                        </span>
+                      )}
+                      <StatusBadge status={appt.status} size="sm" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -315,9 +338,59 @@ const PatientDashboard = () => {
               <div className="space-y-3">
                 {prescriptions.slice(0, 3).map((prescription) => (
                   <div key={prescription._id} className="p-3 rounded-xl bg-sky-50 border border-sky-100">
-                    <div className="text-xs font-bold text-slate-900">{prescription.doctor?.name}</div>
-                    <div className="text-[11px] text-slate-500 mt-1">{prescription.diagnosis}</div>
-                    <div className="text-[11px] text-sky-700 mt-2 font-semibold">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div className="text-xs font-bold text-slate-900">
+                        {prescription.doctor?.name || 'Doctor'}
+                      </div>
+                      {prescription.createdAt && (
+                        <time
+                          className="text-[10px] text-slate-500"
+                          dateTime={prescription.createdAt}
+                        >
+                          {new Date(prescription.createdAt).toLocaleDateString()}
+                        </time>
+                      )}
+                    </div>
+                    {prescription.diagnosis && (
+                      <div className="text-[11px] text-slate-600 mt-2">
+                        <strong>Diagnosis:</strong> {prescription.diagnosis}
+                      </div>
+                    )}
+                    <div className="mt-2 space-y-2">
+                      {(Array.isArray(prescription.medications) ? prescription.medications : []).map(
+                        (medicine, index) => (
+                          <div
+                            key={`${prescription._id}-medicine-${index}`}
+                            className="rounded-lg border border-sky-100 bg-white p-2.5 text-[11px] text-slate-600"
+                          >
+                            <div className="font-bold text-slate-900">
+                              {medicine.name || 'Medicine details unavailable'}
+                            </div>
+                            <div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-1">
+                              {medicine.dosage && <div><strong>Dosage:</strong> {medicine.dosage}</div>}
+                              {medicine.frequency && <div><strong>Frequency:</strong> {medicine.frequency}</div>}
+                              {medicine.duration && <div><strong>Duration:</strong> {medicine.duration}</div>}
+                            </div>
+                          </div>
+                        )
+                      )}
+                      {prescription.instructions && (
+                        <div className="text-[11px] text-slate-600">
+                          <strong>Instructions:</strong> {prescription.instructions}
+                        </div>
+                      )}
+                      {prescription.notes && (
+                        <div className="text-[11px] text-slate-600">
+                          <strong>Notes:</strong> {prescription.notes}
+                        </div>
+                      )}
+                      {prescription.followUpDate && (
+                        <div className="text-[11px] text-slate-600">
+                          <strong>Follow-up:</strong> {prescription.followUpDate}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-sky-700 mt-2 font-semibold">
                       {prescription.medications?.length || 0} prescribed medication(s)
                     </div>
                   </div>

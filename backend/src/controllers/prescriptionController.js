@@ -19,10 +19,31 @@ export const createPrescription = async (req, res) => {
   try {
     const { appointmentId, diagnosis, medications, instructions, notes, followUpDate } = req.body;
 
-    if (!appointmentId || !diagnosis || !Array.isArray(medications) || medications.length === 0) {
+    if (
+      !appointmentId ||
+      typeof diagnosis !== 'string' ||
+      !diagnosis.trim() ||
+      !Array.isArray(medications) ||
+      medications.length === 0
+    ) {
       return res.status(400).json({
         success: false,
         message: 'Prescription requires appointment, diagnosis, and at least one medicine.',
+      });
+    }
+
+    const medicineFields = ['name', 'dosage', 'frequency', 'duration'];
+    if (
+      medications.some((medicine) =>
+        !medicine ||
+        medicineFields.some(
+          (field) => typeof medicine[field] !== 'string' || !medicine[field].trim()
+        )
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Each medicine entry must include name, dosage, frequency, and duration.',
       });
     }
 

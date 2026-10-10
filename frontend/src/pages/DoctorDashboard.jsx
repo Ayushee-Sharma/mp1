@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { appointmentService } from '../services/appointmentService';
 import { doctorService } from '../services/doctorService';
@@ -23,12 +23,21 @@ import {
 import StatusBadge from '../components/common/StatusBadge';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Alert from '../components/common/Alert';
+import MedicineAutocomplete from '../components/MedicineAutocomplete';
+import PrescriptionFormErrorBoundary from '../components/PrescriptionFormErrorBoundary';
+import {
+  clearPrescriptionDraft,
+  getPrescriptionDraft,
+  getPrescriptionDraftKey,
+  savePrescriptionDraft,
+} from '../utils/prescriptionDrafts';
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const DoctorDashboard = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [activeTab, setActiveTab] = useState('requests'); // requests | upcoming | availability | all
   const [loading, setLoading] = useState(true);
   const [prescribingAppointmentId, setPrescribingAppointmentId] = useState(null);
@@ -40,6 +49,10 @@ const DoctorDashboard = () => {
     followUpDate: '',
   });
   const [savingPrescription, setSavingPrescription] = useState(false);
+  const [prescriptionError, setPrescriptionError] = useState('');
+  const [prescriptionOutcomeUncertain, setPrescriptionOutcomeUncertain] = useState(false);
+  const [prescriptionSavedMessage, setPrescriptionSavedMessage] = useState('');
+  const prescriptionRequestLock = useRef(false);
   const [error, setError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
 
@@ -50,22 +63,68 @@ const DoctorDashboard = () => {
   // Note modal / prompt state
   const [activeAppointmentId, setActiveAppointmentId] = useState(null);
   const [doctorNotes, setDoctorNotes] = useState('');
+  const prescriptionDraftKey = getPrescriptionDraftKey(user?._id, prescribingAppointmentId);
+
+  const updatePrescriptionForm = (update) => {
+    setPrescriptionForm((previous) => {
+      const next = typeof update === 'function' ? update(previous) : update;
+      savePrescriptionDraft(prescriptionDraftKey, next);
+      return next;
+    });
+  };
+
+  const closePrescriptionForm = () => {
+    clearPrescriptionDraft(prescriptionDraftKey);
+    setPrescribingAppointmentId(null);
+    setPrescriptionError('');
+    setPrescriptionOutcomeUncertain(false);
+    setPrescriptionSavedMessage('');
+    setPrescriptionForm({
+      diagnosis: '',
+      medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
+      instructions: '',
+      notes: '',
+      followUpDate: '',
+    });
+  };
 
   const loadDoctorData = async () => {
     try {
       setLoading(true);
       setError('');
-      const apptRes = await appointmentService.getAppointments();
-      if (apptRes.success) {
-        setAppointments(apptRes.appointments);
+      const [appointmentsResult, prescriptionsResult] = await Promise.allSettled([
+        appointmentService.getAppointments(),
+        appointmentService.getPrescriptions(),
+      ]);
+      const loadErrors = [];
+
+      if (appointmentsResult.status === 'fulfilled' && appointmentsResult.value.success) {
+        setAppointments(appointmentsResult.value.appointments);
+      } else {
+        loadErrors.push(
+          appointmentsResult.status === 'rejected'
+            ? appointmentsResult.reason.message
+            : 'Failed to load doctor appointments.'
+        );
       }
+
+      if (prescriptionsResult.status === 'fulfilled' && prescriptionsResult.value.success) {
+        setPrescriptions(prescriptionsResult.value.prescriptions);
+      } else {
+        loadErrors.push(
+          prescriptionsResult.status === 'rejected'
+            ? prescriptionsResult.reason.message
+            : 'Failed to load doctor prescriptions.'
+        );
+      }
+      if (loadErrors.length) setError(loadErrors.join(' '));
 
       // Initialize doctor schedule from profile
       if (user?.profile?.availability) {
         setAvailabilitySchedule(user.profile.availability);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load doctor appointments');
+      setError(err.message || 'Failed to load doctor dashboard data.');
     } finally {
       setLoading(false);
     }
@@ -92,7 +151,55 @@ const DoctorDashboard = () => {
   };
 
   const openPrescriptionForm = (appointment) => {
+    const draftKey = getPrescriptionDraftKey(user?._id, appointment._id);
+    const savedDraft = getPrescriptionDraft(draftKey);
+    const initialForm = savedDraft && Array.isArray(savedDraft.medications)
+      ? savedDraft
+      : {
+          diagnosis: '',
+          medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
+          instructions: '',
+          notes: '',
+          followUpDate: '',
+        };
+
     setPrescribingAppointmentId(appointment._id);
+    setPrescriptionForm(initialForm);
+    savePrescriptionDraft(draftKey, initialForm);
+    setPrescriptionError('');
+    setPrescriptionOutcomeUncertain(false);
+    setPrescriptionSavedMessage('');
+    setError('');
+    setActionSuccess('');
+  };
+
+  const updateMedicineField = (index, field, value) => {
+    updatePrescriptionForm((prev) => {
+      const medicines = Array.isArray(prev.medications) ? [...prev.medications] : [];
+      if (!medicines[index] || !['name', 'dosage', 'frequency', 'duration'].includes(field)) {
+        return prev;
+      }
+      medicines[index] = { ...medicines[index], [field]: value };
+      return { ...prev, medications: medicines };
+    });
+  };
+
+  const addMedicationRow = () => {
+    updatePrescriptionForm((prev) => ({
+      ...prev,
+      medications: [...prev.medications, { name: '', dosage: '', frequency: '', duration: '' }],
+    }));
+  };
+
+  const removeMedicationRow = (index) => {
+    updatePrescriptionForm((prev) => ({
+      ...prev,
+      medications: prev.medications.length > 1 ? prev.medications.filter((_, i) => i !== index) : prev.medications,
+    }));
+  };
+
+  const confirmPrescriptionSaved = (message = 'Prescription saved and confirmed by the server.') => {
+    clearPrescriptionDraft(prescriptionDraftKey);
     setPrescriptionForm({
       diagnosis: '',
       medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
@@ -100,75 +207,134 @@ const DoctorDashboard = () => {
       notes: '',
       followUpDate: '',
     });
-    setError('');
-    setActionSuccess('');
+    setPrescriptionOutcomeUncertain(false);
+    setPrescriptionError('');
+    setPrescriptionSavedMessage(message);
+    loadDoctorData();
   };
 
-  const updateMedicineField = (index, field, value) => {
-    setPrescriptionForm((prev) => {
-      const medicines = [...prev.medications];
-      medicines[index] = { ...medicines[index], [field]: value };
-      return { ...prev, medications };
+  const prescriptionExistsForAppointment = (prescriptions) =>
+    prescriptions?.find((prescription) => {
+      const appointmentId =
+        typeof prescription?.appointment === 'string'
+          ? prescription.appointment
+          : prescription?.appointment?._id;
+      return String(appointmentId || '') === String(prescribingAppointmentId || '');
     });
+
+  const fetchPrescriptionList = async () => {
+    const result = await appointmentService.getPrescriptions();
+    if (!result.success || !Array.isArray(result.prescriptions)) {
+      throw new Error(result.message || 'The server could not confirm the prescription status.');
+    }
+    return result.prescriptions;
   };
 
-  const addMedicationRow = () => {
-    setPrescriptionForm((prev) => ({
-      ...prev,
-      medications: [...prev.medications, { name: '', dosage: '', frequency: '', duration: '' }],
-    }));
-  };
+  const handleCheckPrescriptionStatus = async () => {
+    if (prescriptionRequestLock.current) return;
+    prescriptionRequestLock.current = true;
+    setSavingPrescription(true);
+    setPrescriptionError('');
 
-  const removeMedicationRow = (index) => {
-    setPrescriptionForm((prev) => ({
-      ...prev,
-      medications: prev.medications.length > 1 ? prev.medications.filter((_, i) => i !== index) : prev.medications,
-    }));
+    try {
+      const prescriptions = await fetchPrescriptionList();
+      const existingPrescription = prescriptionExistsForAppointment(prescriptions);
+      if (existingPrescription) {
+        confirmPrescriptionSaved('The server confirmed that this appointment already has a saved prescription.');
+      } else {
+        setPrescriptionOutcomeUncertain(false);
+        setPrescriptionError('No saved prescription was found. Your draft is unchanged and can be submitted again.');
+      }
+    } catch (statusError) {
+      setPrescriptionError(
+        `${statusError.message || 'Unable to check prescription status.'} Do not retry the save until the server status can be checked.`
+      );
+    } finally {
+      prescriptionRequestLock.current = false;
+      setSavingPrescription(false);
+    }
   };
 
   const handleCreatePrescription = async () => {
-    try {
-      setSavingPrescription(true);
-      setError('');
-      setActionSuccess('');
+    if (prescriptionRequestLock.current || prescriptionOutcomeUncertain || prescriptionSavedMessage) return;
 
-      if (!prescriptionForm.diagnosis.trim()) {
-        throw new Error('Diagnosis is required before creating a prescription.');
-      }
+    setPrescriptionError('');
+    if (!prescribingAppointmentId) {
+      setPrescriptionError('Select an appointment before creating a prescription.');
+      return;
+    }
 
-      const validMedicines = prescriptionForm.medications.filter((med) =>
-        med.name.trim() || med.dosage.trim() || med.frequency.trim() || med.duration.trim()
+    if (!prescriptionForm.diagnosis.trim()) {
+      setPrescriptionError('Diagnosis is required before creating a prescription.');
+      return;
+    }
+
+    const enteredMedicines = Array.isArray(prescriptionForm.medications)
+      ? prescriptionForm.medications
+      : [];
+    const hasValue = (value) => typeof value === 'string' && value.trim().length > 0;
+    const hasAnyMedicineField = (medicine) =>
+      ['name', 'dosage', 'frequency', 'duration'].some((field) => hasValue(medicine?.[field]));
+    const incompleteMedicine = enteredMedicines.find((medicine) => {
+      if (!hasAnyMedicineField(medicine)) return false;
+      return !['name', 'dosage', 'frequency', 'duration'].every((field) =>
+        hasValue(medicine?.[field])
       );
+    });
 
-      if (validMedicines.length === 0) {
-        throw new Error('Add at least one medicine with dosage, frequency, and duration.');
-      }
+    if (incompleteMedicine) {
+      setPrescriptionError('Complete the name, dosage, frequency, and duration for each medicine row.');
+      return;
+    }
 
+    const validMedicines = enteredMedicines
+      .filter(hasAnyMedicineField)
+      .map((medicine) => ({
+        name: medicine.name.trim(),
+        dosage: medicine.dosage.trim(),
+        frequency: medicine.frequency.trim(),
+        duration: medicine.duration.trim(),
+      }));
+
+    if (validMedicines.length === 0) {
+      setPrescriptionError('Add at least one medicine with dosage, frequency, and duration.');
+      return;
+    }
+
+    prescriptionRequestLock.current = true;
+    setSavingPrescription(true);
+    try {
+      setActionSuccess('');
       const payload = {
         appointmentId: prescribingAppointmentId,
-        diagnosis: prescriptionForm.diagnosis,
+        diagnosis: prescriptionForm.diagnosis.trim(),
         medications: validMedicines,
-        instructions: prescriptionForm.instructions,
-        notes: prescriptionForm.notes,
+        instructions: prescriptionForm.instructions.trim(),
+        notes: prescriptionForm.notes.trim(),
         followUpDate: prescriptionForm.followUpDate,
       };
 
       const res = await appointmentService.createPrescription(payload);
-      if (res.success) {
-        setActionSuccess('Prescription created successfully.');
-        setPrescribingAppointmentId(null);
-        setPrescriptionForm({
-          diagnosis: '',
-          medications: [{ name: '', dosage: '', frequency: '', duration: '' }],
-          instructions: '',
-          notes: '',
-          followUpDate: '',
-        });
-        loadDoctorData();
+      if (!res.success || !res.prescription?._id) {
+        throw new Error(res.message || 'The server did not confirm that the prescription was saved.');
       }
+      confirmPrescriptionSaved(res.message || 'Prescription saved and confirmed by the server.');
     } catch (err) {
-      setError(err.message || 'Failed to create prescription.');
+      try {
+        const prescriptions = await fetchPrescriptionList();
+        if (prescriptionExistsForAppointment(prescriptions)) {
+          confirmPrescriptionSaved('The server confirmed that this appointment has a saved prescription.');
+        } else {
+          setPrescriptionError(err.message || 'Failed to create prescription. Your draft is preserved; you can correct the issue and retry.');
+        }
+      } catch {
+        setPrescriptionOutcomeUncertain(true);
+        setPrescriptionError(
+          'The save could not be confirmed, and the server status check failed. Your draft is preserved; check the save status before retrying.'
+        );
+      }
     } finally {
+      prescriptionRequestLock.current = false;
       setSavingPrescription(false);
     }
   };
@@ -232,6 +398,17 @@ const DoctorDashboard = () => {
   const todayAppointments = appointments.filter(
     (a) => a.date === todayStr && (a.status === 'Confirmed' || a.status === 'Pending')
   );
+  const prescriptionByAppointment = new Map(
+    prescriptions
+      .map((prescription) => {
+        const appointment = prescription.appointment;
+        const appointmentId = typeof appointment === 'string' ? appointment : appointment?._id;
+        return appointmentId ? [String(appointmentId), prescription] : null;
+      })
+      .filter(Boolean)
+  );
+  const getPrescriptionForAppointment = (appointmentId) =>
+    prescriptionByAppointment.get(String(appointmentId));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -320,6 +497,7 @@ const DoctorDashboard = () => {
           { key: 'requests', label: `Pending Requests (${pendingRequests.length})` },
           { key: 'upcoming', label: `Confirmed (${confirmedAppointments.length})` },
           { key: 'all', label: `All Consultations (${appointments.length})` },
+          { key: 'prescriptions', label: `Prescriptions (${prescriptions.length})` },
           { key: 'availability', label: 'Availability Schedules' },
         ].map((tab) => (
           <button
@@ -444,7 +622,14 @@ const DoctorDashboard = () => {
                         Contact: {appt.patientPhone} • {appt.patientAge ? `Age ${appt.patientAge}` : ''}
                       </p>
                     </div>
-                    <StatusBadge status={appt.status} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={appt.status} />
+                      {getPrescriptionForAppointment(appt._id) && (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                          Prescription issued
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -549,6 +734,13 @@ const DoctorDashboard = () => {
                     <td className="py-3 px-4 text-slate-600 max-w-xs truncate">{appt.reason}</td>
                     <td className="py-3 px-4">
                       <StatusBadge status={appt.status} size="sm" />
+                      {getPrescriptionForAppointment(appt._id) && (
+                        <div className="mt-1.5">
+                          <span className="rounded-full bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700">
+                            Prescription issued
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       {appt.status === 'Pending' && (
@@ -576,7 +768,98 @@ const DoctorDashboard = () => {
         </div>
       )}
 
+      {activeTab === 'prescriptions' && (
+        <section className="space-y-4" aria-labelledby="doctor-prescriptions-heading">
+          <div>
+            <h2 id="doctor-prescriptions-heading" className="text-base font-extrabold text-slate-900">
+              E-Prescriptions
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Prescriptions associated with your doctor account.
+            </p>
+          </div>
+
+          {loading ? (
+            <LoadingSpinner message="Loading prescriptions..." />
+          ) : prescriptions.length > 0 ? (
+            <div className="space-y-4">
+              {prescriptions.map((prescription) => (
+                <article
+                  key={prescription._id}
+                  className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        {prescription.patient?.name || 'Patient'}
+                      </h3>
+                      {prescription.appointment && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Appointment: {prescription.appointment.date} at {prescription.appointment.time}
+                        </p>
+                      )}
+                    </div>
+                    {prescription.createdAt && (
+                      <time className="text-[11px] text-slate-500" dateTime={prescription.createdAt}>
+                        Prescribed {new Date(prescription.createdAt).toLocaleDateString()}
+                      </time>
+                    )}
+                  </div>
+
+                  {prescription.diagnosis && (
+                    <p className="text-xs text-slate-700">
+                      <strong>Diagnosis:</strong> {prescription.diagnosis}
+                    </p>
+                  )}
+
+                  <div className="space-y-2">
+                    {(Array.isArray(prescription.medications) ? prescription.medications : []).map(
+                      (medicine, index) => (
+                        <div
+                          key={`${prescription._id}-medicine-${index}`}
+                          className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600"
+                        >
+                          <div className="font-bold text-slate-900">
+                            {medicine.name || 'Medicine details unavailable'}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                            {medicine.dosage && <span><strong>Dosage:</strong> {medicine.dosage}</span>}
+                            {medicine.frequency && <span><strong>Frequency:</strong> {medicine.frequency}</span>}
+                            {medicine.duration && <span><strong>Duration:</strong> {medicine.duration}</span>}
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {prescription.instructions && (
+                    <p className="text-xs text-slate-600">
+                      <strong>Instructions:</strong> {prescription.instructions}
+                    </p>
+                  )}
+                  {prescription.notes && (
+                    <p className="text-xs text-slate-600">
+                      <strong>Notes:</strong> {prescription.notes}
+                    </p>
+                  )}
+                  {prescription.followUpDate && (
+                    <p className="text-xs text-slate-600">
+                      <strong>Follow-up:</strong> {prescription.followUpDate}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
+              No prescriptions are available for this doctor account.
+            </p>
+          )}
+        </section>
+      )}
+
       {prescribingAppointmentId && (
+        <PrescriptionFormErrorBoundary key={prescribingAppointmentId}>
         <div className="bg-white rounded-3xl border border-sky-200 p-6 shadow-xs space-y-5">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-4">
             <div>
@@ -584,20 +867,36 @@ const DoctorDashboard = () => {
               <p className="text-xs text-slate-500">Doctor-issued prescription for the selected consultation.</p>
             </div>
             <button
-              onClick={() => setPrescribingAppointmentId(null)}
+              type="button"
+              onClick={closePrescriptionForm}
+              disabled={savingPrescription}
               className="text-xs font-semibold text-slate-500 hover:text-slate-800"
             >
               Close
             </button>
           </div>
 
-          <div className="space-y-4">
+          {prescriptionSavedMessage && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800" role="status">
+              {prescriptionSavedMessage}
+            </div>
+          )}
+          {prescriptionError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+              <p>{prescriptionError}</p>
+            </div>
+          )}
+
+          <fieldset
+            disabled={Boolean(prescriptionSavedMessage)}
+            className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-70"
+          >
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Diagnosis</label>
               <textarea
                 rows={2}
                 value={prescriptionForm.diagnosis}
-                onChange={(e) => setPrescriptionForm({ ...prescriptionForm, diagnosis: e.target.value })}
+                onChange={(e) => updatePrescriptionForm((previous) => ({ ...previous, diagnosis: e.target.value }))}
                 placeholder="Describe the clinical diagnosis"
                 className="w-full p-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-200"
               />
@@ -617,11 +916,11 @@ const DoctorDashboard = () => {
 
               {prescriptionForm.medications.map((med, index) => (
                 <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-2 p-3 border border-slate-200 rounded-xl bg-slate-50">
-                  <input
+                  <MedicineAutocomplete
                     value={med.name}
-                    onChange={(e) => updateMedicineField(index, 'name', e.target.value)}
-                    placeholder="Medicine"
-                    className="p-2 text-xs border border-slate-200 rounded-lg"
+                    specialty={user?.profile?.specialization}
+                    onChange={(value) => updateMedicineField(index, 'name', value)}
+                    rowIndex={index}
                   />
                   <input
                     value={med.dosage}
@@ -650,6 +949,9 @@ const DoctorDashboard = () => {
                   </button>
                 </div>
               ))}
+              <p className="text-[11px] text-slate-500">
+                Suggestions are general reference aids. The prescribing doctor must verify suitability for the individual patient.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -658,7 +960,7 @@ const DoctorDashboard = () => {
                 <textarea
                   rows={2}
                   value={prescriptionForm.instructions}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, instructions: e.target.value })}
+                  onChange={(e) => updatePrescriptionForm((previous) => ({ ...previous, instructions: e.target.value }))}
                   placeholder="Patient guidance and usage notes"
                   className="w-full p-3 text-sm border border-slate-200 rounded-xl"
                 />
@@ -668,7 +970,7 @@ const DoctorDashboard = () => {
                 <input
                   type="date"
                   value={prescriptionForm.followUpDate}
-                  onChange={(e) => setPrescriptionForm({ ...prescriptionForm, followUpDate: e.target.value })}
+                  onChange={(e) => updatePrescriptionForm((previous) => ({ ...previous, followUpDate: e.target.value }))}
                   className="w-full p-3 text-sm border border-slate-200 rounded-xl"
                 />
               </div>
@@ -679,29 +981,44 @@ const DoctorDashboard = () => {
               <textarea
                 rows={2}
                 value={prescriptionForm.notes}
-                onChange={(e) => setPrescriptionForm({ ...prescriptionForm, notes: e.target.value })}
+                onChange={(e) => updatePrescriptionForm((previous) => ({ ...previous, notes: e.target.value }))}
                 placeholder="Optional remarks for the patient"
                 className="w-full p-3 text-sm border border-slate-200 rounded-xl"
               />
             </div>
+          </fieldset>
 
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setPrescribingAppointmentId(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreatePrescription}
-                disabled={savingPrescription}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl disabled:opacity-60"
-              >
-                {savingPrescription ? 'Saving...' : 'Save Prescription'}
-              </button>
-            </div>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={closePrescriptionForm}
+              disabled={savingPrescription}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800"
+            >
+              {prescriptionSavedMessage ? 'Done' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={prescriptionOutcomeUncertain ? handleCheckPrescriptionStatus : handleCreatePrescription}
+              disabled={savingPrescription || Boolean(prescriptionSavedMessage)}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl disabled:opacity-60"
+            >
+              {savingPrescription ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  {prescriptionOutcomeUncertain ? 'Checking status...' : 'Saving...'}
+                </span>
+              ) : prescriptionSavedMessage ? (
+                'Saved by server'
+              ) : prescriptionOutcomeUncertain ? (
+                'Check save status'
+              ) : (
+                'Save Prescription'
+              )}
+            </button>
           </div>
         </div>
+        </PrescriptionFormErrorBoundary>
       )}
 
       {/* Tab 4: Doctor Availability Schedule Editor */}

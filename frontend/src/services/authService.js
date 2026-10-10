@@ -15,4 +15,9 @@ export const authService = {
     const response = await api.get('/auth/me');
     return response.data;
   },
+
+  getLoginAccounts: async (role) => {
+    const response = await api.get('/auth/accounts', { params: { role } });
+    return response.data;
+  },
 };
