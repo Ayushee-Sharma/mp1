@@ -77,6 +77,14 @@ MongoDB stores the application data.
 4. Start the frontend dev server.
 5. Open the app in the browser and test login, appointment, and prescription flows.
 
+## PWA and Unstable Connections
+
+The app checks browser connectivity and the existing `/api/health` endpoint. A slow response is an approximate request-time indicator, not a measurement of cellular signal strength. Login, bookings, prescriptions, and live data still require the backend; write requests are never queued for offline replay. If a booking or prescription save has an uncertain result, check its server-side status before retrying.
+
+The frontend includes a locally hosted app icon and a service worker that precaches only built frontend assets. API requests and authenticated healthcare data are not cached. A service-worker update is offered for the user to apply rather than forcing a reload. The Install app button appears in browsers that expose an install prompt; otherwise, use the browser's Install app option from its menu when available.
+
+In Codespaces, use the existing backend and frontend start commands (`npm run backend` and `npm run frontend`, or `npm run dev` from the repository root). Use the frontend URL shown in the Ports tab. To test the production build locally, run `npm run build --prefix frontend` followed by `npm run preview --prefix frontend -- --host 0.0.0.0`; use the preview port Vite prints. PWA installation and service workers require a secure context, such as the HTTPS forwarded frontend URL in Codespaces or localhost. Test offline reload from the browser's developer tools after the app shell has loaded once.
+
 ## Development Account Selection
 
 When running the Vite development server, choose **Patient/User** or **Doctor** on the login page and select an existing account to fill in its login email and the shared demonstration password. Sign in with the regular **Sign In** button; authentication still uses the normal email/password endpoint and password verification. The current patient and doctor accounts were verified to use the shared demonstration password.

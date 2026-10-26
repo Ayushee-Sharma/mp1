@@ -148,7 +148,7 @@ const DoctorProfilePage = () => {
       return;
     }
 
-    if (originalError?.isNetworkError && !manualCheck) {
+    if ((originalError?.isNetworkError || originalError?.status >= 500) && !manualCheck) {
       setBookingOutcomeUncertain(true);
       setBookingRetryAllowed(false);
       setBookingError(

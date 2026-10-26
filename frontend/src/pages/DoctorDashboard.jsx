@@ -332,13 +332,19 @@ const DoctorDashboard = () => {
         const prescriptions = await fetchPrescriptionList();
         if (prescriptionExistsForAppointment(prescriptions)) {
           confirmPrescriptionSaved('The server confirmed that this appointment has a saved prescription.');
+        } else if (err.isNetworkError || err.status >= 500) {
+          setPrescriptionOutcomeUncertain(true);
+          setPrescriptionError(
+            `${err.message || 'The save could not be confirmed.'} No prescription is visible yet. Your draft is preserved; check the save status before retrying.`
+          );
         } else {
+          setPrescriptionOutcomeUncertain(false);
           setPrescriptionError(err.message || 'Failed to create prescription. Your draft is preserved; you can correct the issue and retry.');
         }
-      } catch {
+      } catch (statusError) {
         setPrescriptionOutcomeUncertain(true);
         setPrescriptionError(
-          'The save could not be confirmed, and the server status check failed. Your draft is preserved; check the save status before retrying.'
+          `The save could not be confirmed, and the server status check failed: ${statusError.message || 'server unavailable'}. Your draft is preserved; check the save status before retrying.`
         );
       }
     } finally {
