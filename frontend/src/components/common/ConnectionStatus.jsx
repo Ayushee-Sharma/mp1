@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import api from '../../services/api';
+import {
+  BACKEND_AVAILABLE_EVENT,
+  BACKEND_UNAVAILABLE_EVENT,
+} from '../../utils/backendEvents';
 
 const CHECK_INTERVAL = 45000;
 const SLOW_RESPONSE_MS = 1200;
 
 const ConnectionStatus = () => {
   const [status, setStatus] = useState(() => (navigator.onLine ? 'checking' : 'offline'));
+  const backendUnavailable = useRef(!navigator.onLine);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installError, setInstallError] = useState('');
   const {
@@ -20,8 +25,16 @@ const ConnectionStatus = () => {
     let recheckRequested = false;
     let active = true;
 
+    const markBackendUnavailable = () => {
+      if (!backendUnavailable.current) {
+        window.dispatchEvent(new Event(BACKEND_UNAVAILABLE_EVENT));
+      }
+      backendUnavailable.current = true;
+    };
+
     const checkHealth = async () => {
       if (!navigator.onLine) {
+        markBackendUnavailable();
         if (active) setStatus('offline');
         return;
       }
@@ -39,14 +52,21 @@ const ConnectionStatus = () => {
         const response = await api.get('/health', { timeout: 5000 });
         if (active) {
           if (!navigator.onLine) {
+            markBackendUnavailable();
             setStatus('offline');
           } else if (response.data?.status !== 'ok') {
+            markBackendUnavailable();
             setStatus('unavailable');
           } else {
+            if (backendUnavailable.current) {
+              window.dispatchEvent(new Event(BACKEND_AVAILABLE_EVENT));
+            }
+            backendUnavailable.current = false;
             setStatus(performance.now() - startedAt >= SLOW_RESPONSE_MS ? 'slow' : 'good');
           }
         }
       } catch {
+        markBackendUnavailable();
         if (active) setStatus(navigator.onLine ? 'unavailable' : 'offline');
       } finally {
         checking = false;
@@ -54,7 +74,10 @@ const ConnectionStatus = () => {
       }
     };
 
-    const handleOffline = () => setStatus('offline');
+    const handleOffline = () => {
+      markBackendUnavailable();
+      setStatus('offline');
+    };
     const handleOnline = () => checkHealth();
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') checkHealth();

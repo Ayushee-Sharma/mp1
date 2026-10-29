@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { appointmentService } from '../services/appointmentService';
 import {
@@ -15,8 +15,18 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/common/StatusBadge';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import Alert from '../components/common/Alert';
 import { Link } from 'react-router-dom';
+import { BACKEND_AVAILABLE_EVENT } from '../utils/backendEvents';
+
+const getLoadErrorMessage = (error) => {
+  if (error.status >= 500) {
+    return 'The healthcare server could not load appointments. Please try again shortly.';
+  }
+  if (error.isNetworkError) {
+    return 'Unable to reach the healthcare server. Check your connection and retry.';
+  }
+  return error.message || 'Failed to load appointments. Please try again.';
+};
 
 const AppointmentsPage = () => {
   const { user } = useAuth();
@@ -25,8 +35,28 @@ const AppointmentsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [writeOutcomeUncertain, setWriteOutcomeUncertain] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadedStatus, setLoadedStatus] = useState('All');
+  const selectedStatusRef = useRef(selectedStatus);
+  const activeRequestStatusRef = useRef(null);
+  const requestInFlightRef = useRef(false);
+  const queuedRefreshRef = useRef(false);
+  const writeVerificationRequiredRef = useRef(false);
 
-  const loadAppointments = async (status = 'All') => {
+  selectedStatusRef.current = selectedStatus;
+
+  const loadAppointments = useCallback(async (status = selectedStatusRef.current, force = false) => {
+    if (requestInFlightRef.current) {
+      if (force || status !== activeRequestStatusRef.current) {
+        queuedRefreshRef.current = true;
+      }
+      return;
+    }
+
+    requestInFlightRef.current = true;
+    activeRequestStatusRef.current = status;
+    const verifiesWriteOutcome = writeVerificationRequiredRef.current;
     try {
       setLoading(true);
       setError('');
@@ -34,19 +64,41 @@ const AppointmentsPage = () => {
       if (status !== 'All') params.status = status;
 
       const data = await appointmentService.getAppointments(params);
-      if (data.success) {
-        setAppointments(data.appointments);
+      if (!data.success || !Array.isArray(data.appointments)) {
+        throw new Error('The appointment response was invalid.');
+      }
+      setAppointments(data.appointments);
+      setLoadedStatus(status);
+      setHasLoaded(true);
+      if (verifiesWriteOutcome) {
+        writeVerificationRequiredRef.current = false;
+        setWriteOutcomeUncertain(false);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load appointments');
+      setError(getLoadErrorMessage(err));
     } finally {
       setLoading(false);
+      requestInFlightRef.current = false;
+      activeRequestStatusRef.current = null;
+      if (queuedRefreshRef.current) {
+        queuedRefreshRef.current = false;
+        loadAppointments(selectedStatusRef.current, true);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadAppointments(selectedStatus);
-  }, [selectedStatus]);
+  }, [selectedStatus, loadAppointments]);
+
+  useEffect(() => {
+    const handleBackendAvailable = () => {
+      loadAppointments(selectedStatusRef.current, true);
+    };
+
+    window.addEventListener(BACKEND_AVAILABLE_EVENT, handleBackendAvailable);
+    return () => window.removeEventListener(BACKEND_AVAILABLE_EVENT, handleBackendAvailable);
+  }, [loadAppointments]);
 
   const handleCancel = async (id) => {
     if (!window.confirm('Are you sure you want to cancel this appointment?')) return;
@@ -54,10 +106,16 @@ const AppointmentsPage = () => {
       const res = await appointmentService.cancelAppointment(id);
       if (res.success) {
         setSuccess('Appointment successfully cancelled.');
-        loadAppointments(selectedStatus);
+        loadAppointments(selectedStatus, true);
       }
     } catch (err) {
-      setError(err.message || 'Failed to cancel appointment');
+      if (err.isNetworkError || err.status >= 500) {
+        writeVerificationRequiredRef.current = true;
+        setWriteOutcomeUncertain(true);
+        setError('');
+      } else {
+        setError(err.message || 'Failed to cancel appointment');
+      }
     }
   };
 
@@ -66,14 +124,25 @@ const AppointmentsPage = () => {
       const res = await appointmentService.updateStatus(id, status);
       if (res.success) {
         setSuccess(`Appointment updated to ${status}`);
-        loadAppointments(selectedStatus);
+        loadAppointments(selectedStatus, true);
       }
     } catch (err) {
-      setError(err.message || 'Failed to update appointment');
+      if (err.isNetworkError || err.status >= 500) {
+        writeVerificationRequiredRef.current = true;
+        setWriteOutcomeUncertain(true);
+        setError('');
+      } else {
+        setError(err.message || 'Failed to update appointment');
+      }
     }
   };
 
   const statuses = ['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled', 'Rejected'];
+
+  const showAppointments = hasLoaded && appointments.length > 0;
+  const showEmptyState = hasLoaded && !loading && !error && appointments.length === 0;
+  const appointmentActionsDisabled =
+    writeOutcomeUncertain || loading || Boolean(error) || loadedStatus !== selectedStatus;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
@@ -103,7 +172,34 @@ const AppointmentsPage = () => {
       </div>
 
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
-      {error && <Alert type="error" message={error} onClose={() => setError('')} />}
+      {error && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800" role="alert">
+          <span className="text-sm font-medium">{error}</span>
+          <button
+            type="button"
+            onClick={() => loadAppointments(selectedStatus, true)}
+            disabled={loading}
+            className="rounded-lg border border-rose-300 px-3 py-1.5 text-sm font-semibold hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {writeOutcomeUncertain && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" role="alert">
+          <span className="text-sm font-medium">
+            The appointment update could not be confirmed. Refresh its status before trying the action again.
+          </span>
+          <button
+            type="button"
+            onClick={() => loadAppointments(selectedStatus, true)}
+            disabled={loading}
+            className="rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-semibold hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Refresh to verify
+          </button>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
@@ -126,9 +222,24 @@ const AppointmentsPage = () => {
       </div>
 
       {/* Appointments List */}
-      {loading ? (
+      {loading && !hasLoaded ? (
         <LoadingSpinner message="Retrieving appointments..." />
-      ) : appointments.length > 0 ? (
+      ) : (
+        <>
+          {loading && hasLoaded && (
+            <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800" role="status">
+              Refreshing appointments. Previously loaded details may be outdated.
+            </p>
+          )}
+          {hasLoaded && (error || loadedStatus !== selectedStatus) && (
+            <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800" role="status">
+              Showing the last successfully loaded {loadedStatus === 'All' ? '' : `${loadedStatus.toLowerCase()} `}appointments
+              {loadedStatus !== selectedStatus
+                ? `, not the current ${selectedStatus.toLowerCase()} filter results`
+                : ''}. These details may be outdated.
+            </p>
+          )}
+          {showAppointments ? (
         <div className="space-y-4">
           {appointments.map((appt) => (
             <div
@@ -189,6 +300,7 @@ const AppointmentsPage = () => {
                 {user?.role === 'patient' && (appt.status === 'Pending' || appt.status === 'Confirmed') && (
                   <button
                     onClick={() => handleCancel(appt._id)}
+                    disabled={appointmentActionsDisabled}
                     className="px-3.5 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors border border-rose-200"
                   >
                     Cancel Appointment
@@ -199,12 +311,14 @@ const AppointmentsPage = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleDoctorStatus(appt._id, 'Confirmed')}
+                      disabled={appointmentActionsDisabled}
                       className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-2xs"
                     >
                       Confirm
                     </button>
                     <button
                       onClick={() => handleDoctorStatus(appt._id, 'Rejected')}
+                      disabled={appointmentActionsDisabled}
                       className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg"
                     >
                       Reject
@@ -215,6 +329,7 @@ const AppointmentsPage = () => {
                 {user?.role === 'doctor' && appt.status === 'Confirmed' && (
                   <button
                     onClick={() => handleDoctorStatus(appt._id, 'Completed')}
+                    disabled={appointmentActionsDisabled}
                     className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs"
                   >
                     Mark Completed
@@ -224,7 +339,7 @@ const AppointmentsPage = () => {
             </div>
           ))}
         </div>
-      ) : (
+          ) : showEmptyState ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
           <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-2" />
           <h3 className="text-sm font-bold text-slate-800">No appointments found</h3>
@@ -234,6 +349,8 @@ const AppointmentsPage = () => {
               : 'You do not have any recorded consultations.'}
           </p>
         </div>
+          ) : null}
+        </>
       )}
     </div>
   );

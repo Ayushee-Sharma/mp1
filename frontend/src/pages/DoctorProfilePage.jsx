@@ -19,6 +19,10 @@ import { appointmentService } from '../services/appointmentService';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import Alert from '../components/common/Alert';
+import {
+  BACKEND_AVAILABLE_EVENT,
+  BACKEND_UNAVAILABLE_EVENT,
+} from '../utils/backendEvents';
 
 const DoctorProfilePage = () => {
   const { id } = useParams();
@@ -40,6 +44,7 @@ const DoctorProfilePage = () => {
   const [patientPhone, setPatientPhone] = useState(user?.phone || '');
   const [patientAge, setPatientAge] = useState(user?.profile?.age || '');
   const [patientGender, setPatientGender] = useState(user?.profile?.gender || 'Male');
+  const [backendUnavailable, setBackendUnavailable] = useState(() => !navigator.onLine);
 
   const [submitting, setSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState('');
@@ -50,6 +55,7 @@ const DoctorProfilePage = () => {
   const pendingBookingPayload = useRef(null);
   const lastDoctorRequestId = useRef(null);
   const lastSlotsRequestKey = useRef(null);
+  const refreshAvailableSlotsRef = useRef(null);
 
   // Initialize default date (tomorrow)
   useEffect(() => {
@@ -91,15 +97,18 @@ const DoctorProfilePage = () => {
         throw new Error(res.message || 'Available appointment slots could not be loaded.');
       }
       setSlotsData(res);
+      setBackendUnavailable(false);
       if (res.slots?.find((slot) => slot.time === selectedTime)?.isBooked) {
         setSelectedTime('');
       }
     } catch (err) {
+      setBackendUnavailable(true);
       setSlotsError(err.message || 'Failed to load appointment slots.');
     } finally {
       setSlotsLoading(false);
     }
   };
+  refreshAvailableSlotsRef.current = refreshAvailableSlots;
 
   useEffect(() => {
     if (lastDoctorRequestId.current !== id) {
@@ -116,6 +125,27 @@ const DoctorProfilePage = () => {
     setSelectedTime('');
     refreshAvailableSlots();
   }, [id, selectedDate]);
+
+  useEffect(() => {
+    const handleOffline = () => setBackendUnavailable(true);
+    const handleOnline = () => setBackendUnavailable(true);
+    const handleBackendUnavailable = () => setBackendUnavailable(true);
+    const handleBackendAvailable = () => {
+      setBackendUnavailable(false);
+      refreshAvailableSlotsRef.current();
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener(BACKEND_UNAVAILABLE_EVENT, handleBackendUnavailable);
+    window.addEventListener(BACKEND_AVAILABLE_EVENT, handleBackendAvailable);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener(BACKEND_UNAVAILABLE_EVENT, handleBackendUnavailable);
+      window.removeEventListener(BACKEND_AVAILABLE_EVENT, handleBackendAvailable);
+    };
+  }, []);
 
   const findMatchingBooking = (appointments, payload) =>
     appointments?.find((appointment) => {
@@ -484,6 +514,16 @@ const DoctorProfilePage = () => {
               </div>
             ) : (
               <form onSubmit={handleBooking} className="space-y-4">
+                {(backendUnavailable || slotsError) && (
+                  <div
+                    className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                    role="status"
+                  >
+                    {navigator.onLine
+                      ? 'Appointment availability could not be confirmed. Your entered details are retained. Check availability again before submitting.'
+                      : 'You are offline. Your entered details are retained; reconnect and check availability before submitting.'}
+                  </div>
+                )}
                 {bookingError && (
                   <div className="space-y-2">
                     <Alert
@@ -545,6 +585,11 @@ const DoctorProfilePage = () => {
                   ) : slotsError ? (
                     <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
                       <p>{slotsError}</p>
+                      {selectedTime && (
+                        <p className="mt-1 font-semibold">
+                          Selected time retained: {selectedTime}
+                        </p>
+                      )}
                       <button
                         type="button"
                         onClick={refreshAvailableSlots}
@@ -622,6 +667,8 @@ const DoctorProfilePage = () => {
                   disabled={
                     submitting ||
                     slotsLoading ||
+                    backendUnavailable ||
+                    Boolean(slotsError) ||
                     bookingOutcomeUncertain ||
                     !selectedTime ||
                     slotsData?.isDayAvailable === false
